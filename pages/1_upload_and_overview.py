@@ -39,34 +39,39 @@ if uploaded_file is not None:
     #saving dataset for other pages to access it
     st.session_state["data"] = df
     
-
     # Display dataset overview
     st.markdown("**Data Preview:**")
     st.write(df)
+    # Data shape
     if st.sidebar.checkbox("Show Data Shape"):
         st.markdown("**Data Shape:**")
-        st.write(df.shape)
+        st.write("Number of rows: ", df.shape[0])
+        st.write("Number of columns: ", df.shape[1])
+    # Column names
     if st.sidebar.checkbox("Show Column Names"):
         st.markdown("**Column Names:**")
         st.write(df.columns.tolist())
+    # Data types
     if st.sidebar.checkbox("Show Data Types"):
         st.markdown("**Data Types:**")
         st.write(df.dtypes)
+    # Summary stats
     if st.sidebar.checkbox("Show Summary Statistics"):
         st.markdown("**Summary Statistics:**")
         st.write(df.describe(include='all'))
+    # Missing values
     if st.sidebar.checkbox("Show Missing Values"):
         missing = pd.DataFrame({
             "Missing Count": df.isnull().sum(),
-            "Missing Percentage": (df.isnull().sum() / len(df) * 100).round(2)
+            "Missing Percentage (%)": (df.isnull().sum() / len(df) * 100).round(2)
         })
         st.markdown("**Missing Values:**")
         st.write(missing)
+    # Duplicate rows
     if st.sidebar.checkbox("Duplicate Rows"):
-        # duplicates = df[df.duplicated()]
         st.markdown("**Duplicate Rows:**")
         if df.duplicated().sum() > 0:
             st.markdown("**Number of Duplicate Rows:**")
             st.write(df[df.duplicated()])
         else:   
-            st.write(df.duplicated().sum())
+            st.info("No duplicate rows found")

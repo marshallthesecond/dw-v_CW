@@ -21,6 +21,16 @@ else:
     #handle missing values
     st.subheader("Handle missing Values")
 
+    df_missing = df.loc[:, df.isnull().any()]
+
+    if st.checkbox("Show missing values"):
+        missing = pd.DataFrame({
+            "Missing Count": df_missing.isnull().sum(),
+            "Missing Percentage (%)": (df_missing.isnull().sum() / len(df) * 100).round(5)
+        })
+        st.markdown("**Missing Values:**")
+        st.write(missing)
+
     if st.checkbox("Drop rows with missing values"):
         df = df.dropna()
         st.success("Rows with missing values removed")
