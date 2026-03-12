@@ -72,9 +72,19 @@ def clean_prep():
       df = df.drop(columns=columns_to_drop)
     st.success("Selected columns dropped")
     
+    #column renaming
+    st.subheader("Rename Column")
 
+    old_name = st.selectbox("Select column to rename", df.columns)
+    new_name = st.text_input("Enter new column name")
+
+    if st.button("Rename Column"):
+      if new_name != "":
+        df = df.rename(columns={old_name: new_name})
+        st.success("Column renamed successfully")
+    
     st.subheader("Cleaned Dataset")
     st.write(df)
 
-    #saving cleaned dataset back to session
+    #saving cleaned dataset 
     st.session_state["data"] = df
