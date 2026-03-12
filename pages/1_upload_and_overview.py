@@ -39,6 +39,8 @@ if uploaded_file is not None:
     #saving dataset for other pages to access it
     st.session_state["data"] = df
     
+
+    # Display dataset overview
     st.markdown("**Data Preview:**")
     st.write(df)
     if st.sidebar.checkbox("Show Data Shape"):
