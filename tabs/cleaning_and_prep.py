@@ -1,14 +1,17 @@
 import streamlit as st
 import pandas as pd
 
-st.title("Data Cleaning and Preparation")
+def clean_prep():
 
-#Get dataset from session state
-df = st.session_state.get("data")
+    st.title("Data Cleaning and Preparation")
 
-if df is None:
-    st.warning("Please upload a dataset first in the Upload & Overview page.")
-else:
+    #Get dataset from session state
+    df = st.session_state.get("data")
+
+    if df is None:
+        st.warning("Please upload a dataset first in the Upload & Overview page.")
+        return
+
 
     st.subheader("Current Dataset")
     st.write(df)
