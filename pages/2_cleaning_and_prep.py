@@ -7,7 +7,7 @@ st.title("Data Cleaning and Preparation")
 df = st.session_state.get("data")
 
 if df is None:
-    st.warning("Please upload a dataset first in the Upload & Overview page.")
+    st.warning("Please upload a dataset first in the Upload & Overview page")
 else:
 
     st.subheader("Current Dataset")
@@ -39,9 +39,34 @@ else:
     )
 
     df = df[selected_columns]
+    
+    #column deletion
+st.subheader("Drop Columns")
+
+columns_to_drop = st.multiselect(
+    "Select columns to drop",
+    df.columns
+)
+
+if st.button("Drop Selected Columns"):
+    df = df.drop(columns=columns_to_drop)
+    st.success("Selected columns dropped")
 
     st.subheader("Cleaned Dataset")
     st.write(df)
+
+    #column rename
+st.subheader("Rename column")
+
+old_name = st.selectbox("Select column to rename", df.columns)
+new_name = st.text_input("Enter new column name")
+
+if st.button("Rename Column"):
+    if new_name.strip() != "":
+        df.rename(columns={old_name: new_name}, inplace=True)
+        st.session_state["data"] = df
+        st.success(f"Column '{old_name}' renamed to '{new_name}'")
+        st.rerun()
 
     #saving cleaned dataset back to session
     st.session_state["data"] = df

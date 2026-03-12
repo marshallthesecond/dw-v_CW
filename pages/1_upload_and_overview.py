@@ -35,6 +35,8 @@ if uploaded_file is not None:
         df = pd.read_json(uploaded_file)
     else:
         df = pd.read_csv(uploaded_file)
+    #remove duplicate column names
+    df = df.loc[:, ~df.columns.duplicated()]
 
     #saving dataset for other pages to access it
     st.session_state["data"] = df
