@@ -35,6 +35,10 @@ if uploaded_file is not None:
         df = pd.read_json(uploaded_file)
     else:
         df = pd.read_csv(uploaded_file)
+
+    #saving dataset for other pages to access it
+    st.session_state["data"] = df
+    
     st.markdown("**Data Preview:**")
     st.write(df)
     if st.sidebar.checkbox("Show Data Shape"):
