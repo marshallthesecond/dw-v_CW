@@ -61,6 +61,17 @@ def clean_prep():
     )
 
     df = df[selected_columns]
+    #column deletion
+    st.subheader("Drop Columns")
+
+    columns_to_drop = st.multiselect(
+       "Select columns to drop",
+    df.columns
+)
+    if st.button("Drop Selected Columns"):
+      df = df.drop(columns=columns_to_drop)
+    st.success("Selected columns dropped")
+    
 
     st.subheader("Cleaned Dataset")
     st.write(df)
