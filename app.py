@@ -21,9 +21,25 @@ status_text = st.sidebar.empty()
 for i in range(100):
     status_text.info("%i%% Complete" % i)
     progress_bar.progress(i + 1)
-    time.sleep(0.005)
+    time.sleep(0.001)
 progress_bar.empty()
 status_text.empty()
+
+
+# File uploader
+with st.sidebar.container(border=True):
+    # st.write("Upload your dataset here:")
+    uploaded_file = st.file_uploader("Upload your file", type=["csv", "excel", "json"])
+if uploaded_file is not None:
+    if uploaded_file.type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        df = pd.read_excel(uploaded_file)
+    elif uploaded_file.type == "application/json":
+        df = pd.read_json(uploaded_file)
+    else:
+        df = pd.read_csv(uploaded_file)
+
+    #saving dataset for other pages to access it
+    st.session_state["data"] = df
 
 
 # Tabs

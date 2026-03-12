@@ -9,12 +9,11 @@ def clean_prep():
     df = st.session_state.get("data")
 
     if df is None:
-        st.warning("Please upload a dataset first in the Upload & Overview page.")
+        st.warning("Please upload a dataset first in the sidebar.")
         return
 
-
     st.subheader("Current Dataset")
-    st.write(df)
+    st.write(df.head())
 
     #remove duplicates
     if st.checkbox("Remove duplicate rows"):
@@ -26,13 +25,23 @@ def clean_prep():
 
     df_missing = df.loc[:, df.isnull().any()]
 
-    if st.checkbox("Show missing values"):
-        missing = pd.DataFrame({
-            "Missing Count": df_missing.isnull().sum(),
-            "Missing Percentage (%)": (df_missing.isnull().sum() / len(df) * 100).round(5)
-        })
-        st.markdown("**Missing Values:**")
-        st.write(missing)
+    with st.container(border=True):
+        if st.checkbox("Show missing values"):
+            missing = pd.DataFrame({
+                "Row names": df_missing.columns,
+                "Missing Count": df_missing.isnull().sum(),
+                "Missing Percentage (%)": (df_missing.isnull().sum() / len(df) * 100).round(5)
+            })
+            st.markdown("**Missing Values Overview:**")
+            # st.write(missing)
+            event = st.dataframe(
+                missing,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="multi-row",
+            )
+            # st.write("Selected rows:", selection)
 
     if st.checkbox("Drop rows with missing values"):
         df = df.dropna()
