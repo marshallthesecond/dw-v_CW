@@ -26,7 +26,6 @@ def clean_prep():
     st.subheader("Current Dataset")
     st.write(df.head())
 
-<<<<<<< HEAD
 #duplicate detection nd removal
     st.subheader("Duplicate Detection")
 
@@ -83,8 +82,6 @@ def clean_prep():
                 "parameters": {"keep": keep_option},
                 "columns": dup_columns if dup_columns else "All"
             })
-=======
->>>>>>> cdd1651392d227796135dd64b6731ba7b7233557
 
     #remove duplicates
     if st.checkbox("Remove duplicate rows"):
