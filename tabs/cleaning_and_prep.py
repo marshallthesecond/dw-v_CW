@@ -11,14 +11,20 @@ def clean_prep():
     if df is None:
         st.warning("Please upload a dataset first in the sidebar.")
         return
+    df = st.session_state["data"]
+
+    #initialize transformation log
+    if "transform_log" not in st.session_state:
+     st.session_state["transform_log"] = []
 
     st.subheader("Current Dataset")
     st.write(df.head())
 
     #remove duplicates
     if st.checkbox("Remove duplicate rows"):
-        df = df.drop_duplicates()
-        st.success("Duplicates removed")
+     st.session_state["data"].drop_duplicates(inplace=True)
+    st.success("Duplicates removed")
+    st.session_state["transform_log"].append("Removed duplicate rows")
 
     #handle missing values
     st.subheader("Handle missing Values")
@@ -44,12 +50,14 @@ def clean_prep():
             # st.write("Selected rows:", selection)
 
     if st.checkbox("Drop rows with missing values"):
-        df = df.dropna()
-        st.success("Rows with missing values removed")
+     st.session_state["data"].dropna(inplace=True)
+    st.success("Rows with missing values removed")
+    st.session_state["transform_log"].append("Dropped rows with missing values")
 
     if st.checkbox("Fill missing values with 0"):
-        df = df.fillna(0)
-        st.success("Missing values filled with 0")
+     st.session_state["data"].fillna(0, inplace=True)
+    st.success("Missing values filled with 0")
+    st.session_state["transform_log"].append("Filled missing values with 0")
 
     #column selection
     st.subheader("Select columns to keep")
@@ -68,23 +76,53 @@ def clean_prep():
        "Select columns to drop",
     df.columns
 )
-    if st.button("Drop Selected Columns"):
-      df = df.drop(columns=columns_to_drop)
-    st.success("Selected columns dropped")
+    if st.button("Drop Selected Columns", key="drop_columns_btn"):
+     if st.button("Drop Selected Columns", key="drop_columns_btn"):
+      st.session_state["data"].drop(columns=columns_to_drop, inplace=True)
+    # st.success("Selected columns dropped")
+
+    st.session_state["transform_log"].append(
+        f"Dropped columns: {', '.join(columns_to_drop)}"
+    )
     
     #column renaming
     st.subheader("Rename Column")
+    df = st.session_state["data"]
 
-    old_name = st.selectbox("Select column to rename", df.columns)
-    new_name = st.text_input("Enter new column name")
+    old_name = st.selectbox(
+    "Select column to rename",
+    df.columns,
+    key="rename_select"
+)
 
-    if st.button("Rename Column"):
-      if new_name != "":
-        df = df.rename(columns={old_name: new_name})
+    new_name = st.text_input(
+    "Enter new column name",
+    key="rename_input"
+)
+
+    if st.button("Rename Column", key="rename_button"):
+     if new_name != "":
+        st.session_state["data"].rename(
+            columns={old_name: new_name},
+            inplace=True
+        )
         st.success("Column renamed successfully")
+        st.session_state["transform_log"].append(
+            f"Renamed column '{old_name}' to '{new_name}'"
+)
     
     st.subheader("Cleaned Dataset")
-    st.write(df)
+    st.write(st.session_state["data"])
 
+    st.subheader("Transformation Log")
+
+    if st.session_state["transform_log"]:
+        for step in st.session_state["transform_log"]:
+         st.write("✔", step)
+    else:
+        st.info("No transformations applied yet.")
+    
     #saving cleaned dataset 
-    st.session_state["data"] = df
+    # st.session_state["data"] = df
+    st.subheader("Cleaned Dataset")
+    st.write(st.session_state["data"])
