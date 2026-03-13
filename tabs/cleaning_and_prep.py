@@ -17,7 +17,7 @@ def clean_prep():
     if "original_data" not in st.session_state:
         st.session_state["original_data"] = df.copy()
 
-    #to initialize transf. log
+    #initialize transf. log
     if "transform_log" not in st.session_state:
         st.session_state["transform_log"] = []
 
