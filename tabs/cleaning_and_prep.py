@@ -26,7 +26,6 @@ def clean_prep():
     st.subheader("Current Dataset")
     st.write(df.head())
 
-<<<<<<< HEAD
 #duplicate detection nd removal
     st.subheader("Duplicate Detection")
 
@@ -83,8 +82,6 @@ def clean_prep():
                 "parameters": {"keep": keep_option},
                 "columns": dup_columns if dup_columns else "All"
             })
-=======
->>>>>>> cdd1651392d227796135dd64b6731ba7b7233557
 
     #remove duplicates
     if st.checkbox("Remove duplicate rows"):
@@ -186,6 +183,78 @@ def clean_prep():
                 "parameters": {"new_name": new_name},
                 "columns": [old_name]
             })
+
+    #normalization nd scaling
+    st.subheader("Normalization / Scaling")
+    df = st.session_state["data"]
+
+    #get numeric columns
+    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+
+    if not numeric_cols:
+        st.warning("No numeric columns available for scaling.")
+    else:
+
+    #column selection for scaling
+        scale_columns = st.multiselect(
+            "Select numeric columns to scale",
+        numeric_cols
+    )
+
+    #choose scaling method
+    scaling_method = st.radio(
+        "Choose scaling method",
+        ["Min-Max Scaling", "Z-Score Standardization"]
+    )
+
+    if st.button("Apply Scaling"):
+
+        if not scale_columns:
+            st.warning("Please select at least one column.")
+        else:
+
+            #before stats
+            before_stats = df[scale_columns].describe()
+
+            #min-max scaling
+            if scaling_method == "Min-Max Scaling":
+                for col in scale_columns:
+                    min_val = df[col].min()
+                    max_val = df[col].max()
+
+                    if max_val - min_val != 0:
+                        st.session_state["data"][col] = (
+                            (df[col] - min_val) / (max_val - min_val)
+                        )
+
+            #Z-score standardizating
+            elif scaling_method == "Z-Score Standardization":
+                for col in scale_columns:
+                    mean_val = df[col].mean()
+                    std_val = df[col].std()
+
+                    if std_val != 0:
+                        st.session_state["data"][col] = (
+                            (df[col] - mean_val) / std_val
+                        )
+
+            #after stats
+            after_stats = st.session_state["data"][scale_columns].describe()
+
+            st.success("Scaling applied successfully")
+
+            st.markdown("### Before Scaling Stats")
+            st.dataframe(before_stats)
+
+            st.markdown("### After Scaling Stats")
+            st.dataframe(after_stats)
+
+            #log the transformation
+            st.session_state["transform_log"].append({
+                "operation": "Scaling",
+                "parameters": {"method": scaling_method},
+                "columns": scale_columns
+            })        
 
     #cleaned dataset
     st.subheader("Cleaned Dataset")
