@@ -24,6 +24,63 @@ def clean_prep():
     st.subheader("Current Dataset")
     st.write(df.head())
 
+#duplicate detection nd removal
+    st.subheader("Duplicate Detection")
+
+    df = st.session_state["data"]
+
+    dup_columns = st.multiselect(
+        "Select columns to check duplicates (leave empty for full-row duplicates)",
+        df.columns
+    )
+
+    keep_option = st.radio(
+        "Keep which duplicate?",
+        ["first", "last"]
+    )
+
+    if st.button("Detect Duplicates"):
+
+        if dup_columns:
+            duplicates = df[df.duplicated(subset=dup_columns, keep=False)]
+        else:
+            duplicates = df[df.duplicated(keep=False)]
+
+        st.session_state["duplicates_found"] = duplicates
+
+        st.info(f"{len(duplicates)} duplicate rows found")
+
+    if "duplicates_found" in st.session_state:
+
+        if st.checkbox("Show duplicate rows"):
+            st.dataframe(st.session_state["duplicates_found"])
+
+        if st.button("Remove Duplicates"):
+
+            before = len(df)
+
+            if dup_columns:
+                st.session_state["data"].drop_duplicates(
+                    subset=dup_columns,
+                    keep=keep_option,
+                    inplace=True
+                )
+            else:
+                st.session_state["data"].drop_duplicates(
+                    keep=keep_option,
+                    inplace=True
+                )
+
+            after = len(st.session_state["data"])
+
+            st.success(f"{before - after} duplicate rows removed")
+
+            st.session_state["transform_log"].append({
+                "operation": "Remove Duplicates",
+                "parameters": {"keep": keep_option},
+                "columns": dup_columns if dup_columns else "All"
+            })
+
     #remove duplicates
     if st.checkbox("Remove duplicate rows"):
         before = len(st.session_state["data"])
