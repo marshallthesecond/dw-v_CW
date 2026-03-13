@@ -254,7 +254,73 @@ def clean_prep():
                 "operation": "Scaling",
                 "parameters": {"method": scaling_method},
                 "columns": scale_columns
-            })        
+            })  
+
+        #Data types nd Parsing
+    st.subheader("Data Type Conversion")
+
+    df = st.session_state["data"]
+
+    column_to_convert = st.selectbox(
+        "Select column to convert",
+        df.columns
+    )
+
+    new_type = st.selectbox(
+        "Convert to",
+        ["Numeric", "Categorical", "Datetime"]
+    )
+
+    if st.button("Convert Column Type"):
+
+        before_type = df[column_to_convert].dtype
+
+        try:
+
+            #convert to numeric
+            if new_type == "Numeric":
+
+                #remove common dirty charact. like commas or $
+                st.session_state["data"][column_to_convert] = (
+                    df[column_to_convert]
+                    .astype(str)
+                    .str.replace(",", "")
+                    .str.replace("$", "")
+                )
+
+                st.session_state["data"][column_to_convert] = pd.to_numeric(
+                    st.session_state["data"][column_to_convert],
+                    errors="coerce"
+                )
+
+            #convert to categorical
+            elif new_type == "Categorical":
+
+                st.session_state["data"][column_to_convert] = (
+                    df[column_to_convert].astype("category")
+                )
+
+            #convert to datetime
+            elif new_type == "Datetime":
+
+                st.session_state["data"][column_to_convert] = pd.to_datetime(
+                    df[column_to_convert],
+                    errors="coerce"
+                )
+
+            after_type = st.session_state["data"][column_to_convert].dtype
+
+            st.success(f"Column converted from {before_type} to {after_type}")
+
+            st.session_state["transform_log"].append({
+                "operation": "Convert Data Type",
+                "parameters": {"new_type": new_type},
+                "columns": [column_to_convert]
+            })
+
+        except Exception as e:
+            st.error("Conversion failed")
+            st.write(e)              
 
     #cleaned dataset
     st.subheader("Cleaned Dataset")
