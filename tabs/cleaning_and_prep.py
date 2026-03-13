@@ -5,6 +5,7 @@ def clean_prep():
 
     st.title("Data Cleaning and Preparation")
 
+
     #Get dataset from session state
     df = st.session_state.get("data")
 
@@ -13,6 +14,7 @@ def clean_prep():
         return
     df = st.session_state["data"]
 
+
     #initialize transformation log
     if "transform_log" not in st.session_state:
      st.session_state["transform_log"] = []
@@ -20,11 +22,13 @@ def clean_prep():
     st.subheader("Current Dataset")
     st.write(df.head())
 
+
     #remove duplicates
     if st.checkbox("Remove duplicate rows"):
      st.session_state["data"].drop_duplicates(inplace=True)
     st.success("Duplicates removed")
     st.session_state["transform_log"].append("Removed duplicate rows")
+
 
     #handle missing values
     st.subheader("Handle missing Values")
@@ -59,6 +63,7 @@ def clean_prep():
     st.success("Missing values filled with 0")
     st.session_state["transform_log"].append("Filled missing values with 0")
 
+
     #column selection
     st.subheader("Select columns to keep")
 
@@ -69,13 +74,15 @@ def clean_prep():
     )
 
     df = df[selected_columns]
+
+
     #column deletion
     st.subheader("Drop Columns")
 
     columns_to_drop = st.multiselect(
        "Select columns to drop",
     df.columns
-)
+    )
     if st.button("Drop Selected Columns", key="drop_columns_btn"):
      if st.button("Drop Selected Columns", key="drop_columns_btn"):
       st.session_state["data"].drop(columns=columns_to_drop, inplace=True)
@@ -85,20 +92,21 @@ def clean_prep():
         f"Dropped columns: {', '.join(columns_to_drop)}"
     )
     
+
     #column renaming
     st.subheader("Rename Column")
-    df = st.session_state["data"]
+    # df = st.session_state["data"]
 
     old_name = st.selectbox(
-    "Select column to rename",
-    df.columns,
-    key="rename_select"
-)
+        "Select column to rename",
+        df.columns,
+        key="rename_select"
+    )
 
     new_name = st.text_input(
-    "Enter new column name",
-    key="rename_input"
-)
+        "Enter new column name",
+        key="rename_input"
+    )
 
     if st.button("Rename Column", key="rename_button"):
      if new_name != "":
@@ -109,11 +117,10 @@ def clean_prep():
         st.success("Column renamed successfully")
         st.session_state["transform_log"].append(
             f"Renamed column '{old_name}' to '{new_name}'"
-)
-    
-    st.subheader("Cleaned Dataset")
-    st.write(st.session_state["data"])
+    )
 
+
+    #Transformation log
     st.subheader("Transformation Log")
 
     if st.session_state["transform_log"]:
@@ -122,6 +129,7 @@ def clean_prep():
     else:
         st.info("No transformations applied yet.")
     
+
     #saving cleaned dataset 
     # st.session_state["data"] = df
     st.subheader("Cleaned Dataset")
