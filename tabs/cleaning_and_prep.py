@@ -337,68 +337,80 @@ def clean_prep():
     if num_cols:
 
         outlier_col = st.selectbox(
-            "Select numeric column",
-            num_cols
-        )
+        "Select numeric column",
+        num_cols
+    )
 
-        action = st.radio(
-            "Action for outliers",
-            ["Show Outliers", "Remove Outliers", "Cap Outliers"]
-        )
+    action = st.radio(
+        "Action for outliers",
+        ["Show Outliers", "Remove Outliers", "Cap Outliers"]
+    )
 
-        if st.button("Run Outlier Detection"):
+    if st.button("Run Outlier Detection"):
 
-            Q1 = df[outlier_col].quantile(0.25)
-            Q3 = df[outlier_col].quantile(0.75)
+        Q1 = df[outlier_col].quantile(0.25)
+        Q3 = df[outlier_col].quantile(0.75)
 
-            IQR = Q3 - Q1
+        IQR = Q3 - Q1
 
-            lower = Q1 - 1.5 * IQR
-            upper = Q3 + 1.5 * IQR
+        lower = Q1 - 1.5 * IQR
+        upper = Q3 + 1.5 * IQR
 
-            outliers = df[(df[outlier_col] < lower) | (df[outlier_col] > upper)]
+        outliers = df[(df[outlier_col] < lower) | (df[outlier_col] > upper)]
 
-            st.write("Outliers found:", len(outliers))
+        total_rows = len(df)
+        outlier_count = len(outliers)
+        percent = (outlier_count / total_rows) * 100
 
-            if action == "Show Outliers":
-                st.dataframe(outliers)
+        st.write("Outlier Summary")
+        st.write("Column:", outlier_col)
+        st.write("Total rows:", total_rows)
+        st.write("Outliers found:", outlier_count)
+        st.write("Percentage:", round(percent, 2), "%")
 
-                st.session_state["transform_log"].append({
-                    "operation": "Detect Outliers",
-                    "parameters": {"method": "IQR", "count": len(outliers)},
-                    "columns": [outlier_col]
-                })
+        if action == "Show Outliers":
 
-            elif action == "Remove Outliers":
+            st.dataframe(outliers)
 
-                before = len(df)
+            st.session_state["transform_log"].append({
+                "operation": "Detect Outliers",
+                "parameters": {"method": "IQR", "count": outlier_count},
+                "columns": [outlier_col]
+            })
 
-                st.session_state["data"] = df[
-                    (df[outlier_col] >= lower) &
-                    (df[outlier_col] <= upper)
-                ]
+        elif action == "Remove Outliers":
 
-                after = len(st.session_state["data"])
+            before = len(df)
 
-                st.success(f"{before-after} rows removed")
-                st.session_state["transform_log"].append({
-                    "operation": "Remove Outliers",
-                    "parameters": {"method": "IQR"},
-                    "columns": [outlier_col]
-                })
+            st.session_state["data"] = df[
+                (df[outlier_col] >= lower) &
+                (df[outlier_col] <= upper)
+            ]
 
-            elif action == "Cap Outliers":
+            after = len(st.session_state["data"])
+            removed = before - after
 
-                st.session_state["data"][outlier_col] = df[outlier_col].clip(lower, upper)
+            st.success(f"{removed} rows removed")
 
-                st.success("Outliers capped")
-                st.session_state["transform_log"].append({
-                    "operation": "Cap Outliers",
-                    "parameters": {"method": "IQR"},
-                    "columns": [outlier_col]
-                })        
-                
+            st.session_state["transform_log"].append({
+                "operation": "Remove Outliers",
+                "parameters": {"method": "IQR", "rows_removed": removed},
+                "columns": [outlier_col]
+            })
 
+        elif action == "Cap Outliers":
+
+            cap_count = len(outliers)
+
+            st.session_state["data"][outlier_col] = df[outlier_col].clip(lower, upper)
+
+            st.success(f"{cap_count} values capped")
+
+            st.session_state["transform_log"].append({
+                "operation": "Cap Outliers",
+                "parameters": {"method": "IQR", "values_capped": cap_count},
+                "columns": [outlier_col]
+            })
 
     #normalization nd scaling
     st.subheader("Normalization / Scaling")
