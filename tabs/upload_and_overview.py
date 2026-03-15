@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 
+# @st.cache_data
 def upload_overview():
 
     # Set page configuration
@@ -22,8 +23,12 @@ def upload_overview():
     
     # Display dataset overview
     st.header("Data Preview:")
-    if st.checkbox("Show full dataset"):
-        st.write(df)
+
+    @st.fragment
+    def show_full_dataset():
+        if st.checkbox("Show full dataset"):
+            st.write(df)
+    show_full_dataset()
 
     # Data shape
     with st.container(border=True):
@@ -60,6 +65,7 @@ def upload_overview():
             })
             st.markdown("**Missing Values:**")
             st.write(missing)
+
     # Summary stats
     with st.container(border=True):
         st.markdown("**Summary Statistics:**")
