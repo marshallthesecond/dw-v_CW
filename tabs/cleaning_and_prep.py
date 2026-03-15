@@ -327,7 +327,7 @@ def clean_prep():
                 "parameters": {"threshold_percent": threshold},
                 "columns": [cat_col]
             })
-    #NUMERIC CLEANING (OUTLIERS)
+    #Numeric Cleaning
     st.subheader("Numeric Cleaning / Outlier Detection")
 
     df = st.session_state["data"]
