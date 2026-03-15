@@ -142,7 +142,13 @@ def clean_prep():
         df.columns,
         default=df.columns
     )
-    df = df[selected_columns]
+    st.session_state["data"] = df[selected_columns]
+    #always work on the latest dataframe
+    def get_df():
+        return st.session_state["data"]
+
+    def set_df(new_df):
+        st.session_state["data"] = new_df
 
     #drop columns
     st.subheader("Drop Columns")
@@ -183,6 +189,216 @@ def clean_prep():
                 "parameters": {"new_name": new_name},
                 "columns": [old_name]
             })
+
+    #Data types nd Parsing
+    st.subheader("Data Type Conversion")
+
+    df = st.session_state["data"]
+
+    column_to_convert = st.selectbox(
+        "Select column to convert",
+        df.columns
+    )
+
+    new_type = st.selectbox(
+        "Convert to",
+        ["Numeric", "Categorical", "Datetime"]
+    )
+
+    if st.button("Convert Column Type"):
+
+        before_type = df[column_to_convert].dtype
+
+        try:
+
+            #convert to numeric
+            if new_type == "Numeric":
+
+                #remove common dirty charact. like commas or $
+                st.session_state["data"][column_to_convert] = (
+                    df[column_to_convert]
+                    .astype(str)
+                    .str.replace(",", "")
+                    .str.replace("$", "")
+                )
+
+                st.session_state["data"][column_to_convert] = pd.to_numeric(
+                    st.session_state["data"][column_to_convert],
+                    errors="coerce"
+                )
+
+            #convert to categorical
+            elif new_type == "Categorical":
+
+                st.session_state["data"][column_to_convert] = (
+                    df[column_to_convert].astype("category")
+                )
+
+            #convert to datetime
+            elif new_type == "Datetime":
+
+                st.session_state["data"][column_to_convert] = pd.to_datetime(
+                    df[column_to_convert],
+                    errors="coerce"
+                )
+
+            after_type = st.session_state["data"][column_to_convert].dtype
+
+            st.success(f"Column converted from {before_type} to {after_type}")
+
+            st.session_state["transform_log"].append({
+                "operation": "Convert Data Type",
+                "parameters": {"new_type": new_type},
+                "columns": [column_to_convert]
+            })
+
+        except Exception as e:
+            st.error("Conversion failed")
+            st.write(e)  
+
+        #CATEGORICAL DATA TOOLS
+    st.subheader("Categorical Data Tools")
+
+    df = st.session_state["data"]
+
+    cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
+
+    if cat_cols:
+
+        cat_col = st.selectbox(
+            "Select categorical column",
+            cat_cols
+        )
+
+        clean_option = st.selectbox(
+            "Standardization option",
+            ["Trim whitespace", "Lowercase", "Title Case"]
+        )
+
+        if st.button("Apply Standardization"):
+
+            if clean_option == "Trim whitespace":
+                st.session_state["data"][cat_col] = (
+                    st.session_state["data"][cat_col].astype(str).str.strip()
+                )
+
+            elif clean_option == "Lowercase":
+                st.session_state["data"][cat_col] = (
+                    st.session_state["data"][cat_col].astype(str).str.lower()
+                )
+
+            elif clean_option == "Title Case":
+                st.session_state["data"][cat_col] = (
+                    st.session_state["data"][cat_col].astype(str).str.title()
+                )
+
+            st.success("Categorical values standardized")
+
+            st.session_state["transform_log"].append({
+                "operation": "Categorical Standardization",
+                "parameters": {"method": clean_option},
+                "columns": [cat_col]
+            })
+
+
+        st.markdown("Rare Category Grouping")
+
+        threshold = st.slider(
+            "Minimum frequency (%)",
+            0,
+            20,
+            5
+        )
+
+        if st.button("Group Rare Categories"):
+
+            freq = st.session_state["data"][cat_col].value_counts(normalize=True)
+
+            rare = freq[freq < threshold / 100].index
+
+            st.session_state["data"][cat_col] = (
+                st.session_state["data"][cat_col].replace(rare, "Other")
+            )
+
+            st.success("Rare categories grouped into 'Other'")
+
+            st.session_state["transform_log"].append({
+                "operation": "Rare Category Grouping",
+                "parameters": {"threshold_percent": threshold},
+                "columns": [cat_col]
+            })
+    #NUMERIC CLEANING (OUTLIERS)
+    st.subheader("Numeric Cleaning / Outlier Detection")
+
+    df = st.session_state["data"]
+
+    num_cols = df.select_dtypes(include=["number"]).columns.tolist()
+
+    if num_cols:
+
+        outlier_col = st.selectbox(
+            "Select numeric column",
+            num_cols
+        )
+
+        action = st.radio(
+            "Action for outliers",
+            ["Show Outliers", "Remove Outliers", "Cap Outliers"]
+        )
+
+        if st.button("Run Outlier Detection"):
+
+            Q1 = df[outlier_col].quantile(0.25)
+            Q3 = df[outlier_col].quantile(0.75)
+
+            IQR = Q3 - Q1
+
+            lower = Q1 - 1.5 * IQR
+            upper = Q3 + 1.5 * IQR
+
+            outliers = df[(df[outlier_col] < lower) | (df[outlier_col] > upper)]
+
+            st.write("Outliers found:", len(outliers))
+
+            if action == "Show Outliers":
+                st.dataframe(outliers)
+
+                st.session_state["transform_log"].append({
+                    "operation": "Detect Outliers",
+                    "parameters": {"method": "IQR", "count": len(outliers)},
+                    "columns": [outlier_col]
+                })
+
+            elif action == "Remove Outliers":
+
+                before = len(df)
+
+                st.session_state["data"] = df[
+                    (df[outlier_col] >= lower) &
+                    (df[outlier_col] <= upper)
+                ]
+
+                after = len(st.session_state["data"])
+
+                st.success(f"{before-after} rows removed")
+                st.session_state["transform_log"].append({
+                    "operation": "Remove Outliers",
+                    "parameters": {"method": "IQR"},
+                    "columns": [outlier_col]
+                })
+
+            elif action == "Cap Outliers":
+
+                st.session_state["data"][outlier_col] = df[outlier_col].clip(lower, upper)
+
+                st.success("Outliers capped")
+                st.session_state["transform_log"].append({
+                    "operation": "Cap Outliers",
+                    "parameters": {"method": "IQR"},
+                    "columns": [outlier_col]
+                })        
+                
+
 
     #normalization nd scaling
     st.subheader("Normalization / Scaling")
@@ -256,72 +472,7 @@ def clean_prep():
                 "columns": scale_columns
             })  
 
-        #Data types nd Parsing
-    st.subheader("Data Type Conversion")
-
-    df = st.session_state["data"]
-
-    column_to_convert = st.selectbox(
-        "Select column to convert",
-        df.columns
-    )
-
-    new_type = st.selectbox(
-        "Convert to",
-        ["Numeric", "Categorical", "Datetime"]
-    )
-
-    if st.button("Convert Column Type"):
-
-        before_type = df[column_to_convert].dtype
-
-        try:
-
-            #convert to numeric
-            if new_type == "Numeric":
-
-                #remove common dirty charact. like commas or $
-                st.session_state["data"][column_to_convert] = (
-                    df[column_to_convert]
-                    .astype(str)
-                    .str.replace(",", "")
-                    .str.replace("$", "")
-                )
-
-                st.session_state["data"][column_to_convert] = pd.to_numeric(
-                    st.session_state["data"][column_to_convert],
-                    errors="coerce"
-                )
-
-            #convert to categorical
-            elif new_type == "Categorical":
-
-                st.session_state["data"][column_to_convert] = (
-                    df[column_to_convert].astype("category")
-                )
-
-            #convert to datetime
-            elif new_type == "Datetime":
-
-                st.session_state["data"][column_to_convert] = pd.to_datetime(
-                    df[column_to_convert],
-                    errors="coerce"
-                )
-
-            after_type = st.session_state["data"][column_to_convert].dtype
-
-            st.success(f"Column converted from {before_type} to {after_type}")
-
-            st.session_state["transform_log"].append({
-                "operation": "Convert Data Type",
-                "parameters": {"new_type": new_type},
-                "columns": [column_to_convert]
-            })
-
-        except Exception as e:
-            st.error("Conversion failed")
-            st.write(e)              
-
+        
     #cleaned dataset
     st.subheader("Cleaned Dataset")
     st.write(st.session_state["data"])
