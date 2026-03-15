@@ -24,52 +24,95 @@ def clean_prep():
         st.session_state["transform_log"] = []
 
     st.subheader("Current Dataset")
-    st.write(df.head())
+    st.write(df.tail())
 
+
+    # Duplicates and Missing Values
     with st.container(horizontal=True):
         # Duplicate detection and removal
         with st.container(border=True):
             st.subheader("Duplicate Detection")
 
-            duplicate_options = st.multiselect(
-                "Select columns to check duplicates (leave empty for full-row duplicates)",
-                df.columns,
-                key="duplicate_columns_selector"
-            )
-            keep_duplicates_option = st.radio(
-                "Keep which duplicate?",
-                ["first", "last"],
-                key="keep_duplicate_option"
-            )
+            # Use the current working dataset
+            df = st.session_state["data"]
 
-            if st.button("Detect Duplicates"):
+            # Select columns
+            @st.fragment
+            def duplicate_columns_fragment():
+                st.multiselect(
+                    "Select columns to check duplicates (leave empty for full-row duplicates)",
+                    df.columns,
+                    key="duplicate_columns_selector"
+                )
 
-                if duplicate_options:
-                    duplicates = df[df.duplicated(subset=duplicate_options, keep=False)]
-                else:
-                    duplicates = df[df.duplicated(keep=False)]
-                
-                st.session_state["duplicates_found"] = duplicates
-                st.info(f"{len(duplicates)} duplicate rows found")
+            duplicate_columns_fragment()
 
-            if "duplicates_found" in st.session_state:
+            # Keep option
+            @st.fragment
+            def keep_option_fragment():
+                st.radio(
+                    "Keep which duplicate?",
+                    ["first", "last"],
+                    key="keep_duplicate_option"
+                )
 
-                if st.checkbox("Show duplicate rows"):
-                    st.dataframe(st.session_state["duplicates_found"])
+            keep_option_fragment()
 
-                if st.button("Remove Selected Duplicates"):
+            # Detect duplicates
+            @st.fragment
+            def detect_duplicates_fragment():
 
-                    before = len(df)
+                if st.button("Detect Duplicates", key="detect_duplicates_btn"):
 
-                    if duplicate_options:
+                    cols = st.session_state.get("duplicate_columns_selector", [])
+
+                    if cols:
+                        duplicates = df[df.duplicated(subset=cols, keep=False)]
+                    else:
+                        duplicates = df[df.duplicated(keep=False)]
+
+                    st.session_state["duplicates_found"] = duplicates
+
+                    st.info(f"{len(duplicates)} duplicate rows found")
+                    st.dataframe(duplicates.head())
+
+            detect_duplicates_fragment()
+
+            # # Show duplicates
+            # @st.fragment
+            # def show_duplicates_fragment():
+
+            #     if "duplicates_found" not in st.session_state:
+            #         return
+
+            #     if st.checkbox("Show duplicate rows", key="show_duplicates_checkbox"):
+            #         st.dataframe(st.session_state["duplicates_found"])
+
+            # show_duplicates_fragment()
+
+            # Remove duplicates
+            @st.fragment
+            def remove_duplicates_fragment():
+
+                if "duplicates_found" not in st.session_state:
+                    return
+
+                if st.button("Remove Selected Duplicates", key="remove_duplicates_btn"):
+
+                    cols = st.session_state.get("duplicate_columns_selector", [])
+                    keep_option = st.session_state.get("keep_duplicate_option", "first")
+
+                    before = len(st.session_state["data"])
+
+                    if cols:
                         st.session_state["data"].drop_duplicates(
-                            subset=duplicate_options,
-                            keep=keep_duplicates_option,
+                            subset=cols,
+                            keep=keep_option,
                             inplace=True
                         )
                     else:
                         st.session_state["data"].drop_duplicates(
-                            keep=keep_duplicates_option,
+                            keep=keep_option,
                             inplace=True
                         )
 
@@ -77,24 +120,17 @@ def clean_prep():
 
                     st.success(f"{before - after} duplicate rows removed")
 
+                    if "transform_log" not in st.session_state:
+                        st.session_state["transform_log"] = []
+
                     st.session_state["transform_log"].append({
                         "operation": "Remove Duplicates",
-                        "parameters": {"keep": keep_duplicates_option},
-                        "columns": duplicate_options if duplicate_options else "All"
+                        "parameters": {"keep": keep_option},
+                        "columns": cols if cols else "All"
                     })
 
-            # Remove duplicates
-            if st.button("Remove duplicate rows"):
-                before = len(st.session_state["data"])
-                st.session_state["data"].drop_duplicates(inplace=True)
-                after = len(st.session_state["data"])
-                st.success("Duplicates removed")
+            remove_duplicates_fragment()
 
-                st.session_state["transform_log"].append({
-                    "operation": "Remove Duplicates",
-                    "parameters": {"rows_removed": before - after},
-                    "columns": "All"
-                })
         # Missing value handling
         with st.container(border=True):
             
