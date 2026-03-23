@@ -2,8 +2,7 @@ import streamlit as st
 import pandas as pd
 
 def clean_prep():
-    st.title("Data Cleaning and Preparation")
-
+    st.title("Data Cleaning and Preparation") 
 
     #Get dataset from session state
     df = st.session_state.get("data")
@@ -556,3 +555,5 @@ def clean_prep():
             st.session_state["data"] = st.session_state["original_data"].copy()
             st.session_state["transform_log"] = []
             st.success("Dataset reset to original")
+
+    
