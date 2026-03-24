@@ -4,200 +4,158 @@ import pandas as pd
 def clean_prep():
     st.title("Data Cleaning and Preparation") 
 
-    #Get dataset from session state
-    df = st.session_state.get("data")
+    # Show last action if exists
+    if "last_action" in st.session_state:
+        st.success(st.session_state["last_action"])
+        del st.session_state["last_action"]
 
-    if df is None:
+    # Check dataset
+    if "data" not in st.session_state or st.session_state["data"] is None:
         st.warning("Please upload a dataset first in the sidebar.")
         return
 
-    df = st.session_state["data"]
-
-
-    #store original dataset for reset
-    if "original_data" not in st.session_state:
-        st.session_state["original_data"] = df.copy()
-
-    #initialize transf. log
+    # Initialize transform log
     if "transform_log" not in st.session_state:
         st.session_state["transform_log"] = []
 
-    st.subheader("Current Dataset")
-    st.write(df.tail())
+    # Normalize missing values
+    if st.button("Normalize Missing Values"):
+        st.session_state["data"].replace(
+            ["None", "none", "NULL", "null", "", " "],
+            pd.NA,
+            inplace=True
+        )
+        st.session_state["last_action"] = "Normalized missing values"
 
+    st.space("medium")
 
-    # Duplicates and Missing Values
-    with st.container(horizontal=True):
-        # Duplicate detection and removal
-        with st.container(border=True):
-            st.subheader("Duplicate Detection")
+    df = st.session_state["data"]
 
-            # Use the current working dataset
-            df = st.session_state["data"]
+    # -------------------
+    # Duplicate Detection
+    # -------------------
+    st.subheader("Duplicate Detection")
 
-            # Select columns
-            @st.fragment
-            def duplicate_columns_fragment():
-                st.multiselect(
-                    "Select columns to check duplicates (leave empty for full-row duplicates)",
-                    df.columns,
-                    key="duplicate_columns_selector"
-                )
+    # Column selector and keep option
+    cols = st.multiselect(
+        "Select columns to check duplicates (leave empty for full-row duplicates)",
+        df.columns,
+        key="duplicate_columns_selector"
+    )
+    keep_option = st.radio(
+        "Keep which duplicate?",
+        ["first", "last"],
+        key="keep_duplicate_option"
+    )
 
-            duplicate_columns_fragment()
+    # Detect duplicates
+    if st.button("Detect Duplicates", key="detect_duplicates_btn"):
+        if cols:
+            duplicates = df[df.duplicated(subset=cols, keep=False)]
+        else:
+            duplicates = df[df.duplicated(keep=False)]
+        st.session_state["duplicates_found"] = duplicates
+        st.info(f"{len(duplicates)} duplicate rows found")
+        st.dataframe(duplicates.head())
 
-            # Keep option
-            @st.fragment
-            def keep_option_fragment():
-                st.radio(
-                    "Keep which duplicate?",
-                    ["first", "last"],
-                    key="keep_duplicate_option"
-                )
+    # Remove duplicates (only once per click)
+    if "duplicates_removed" not in st.session_state:
+        st.session_state["duplicates_removed"] = False
 
-            keep_option_fragment()
+    if st.button("Remove Selected Duplicates", key="remove_duplicates_btn") and not st.session_state["duplicates_removed"]:
+        before = len(df)
+        if cols:
+            df_cleaned = df.drop_duplicates(subset=cols, keep=keep_option).reset_index(drop=True)
+        else:
+            df_cleaned = df.drop_duplicates(keep=keep_option).reset_index(drop=True)
 
-            # Detect duplicates
-            @st.fragment
-            def detect_duplicates_fragment():
+        st.session_state["data"] = df_cleaned
+        st.session_state["duplicates_removed"] = True
+        after = len(df_cleaned)
 
-                if st.button("Detect Duplicates", key="detect_duplicates_btn"):
+        st.session_state["last_action"] = f"Removed duplicates"
+        st.success(f"{before - after} duplicate rows removed")
 
-                    cols = st.session_state.get("duplicate_columns_selector", [])
+        st.session_state["transform_log"].append({
+            "operation": "Remove Duplicates",
+            "parameters": {"keep": keep_option},
+            "columns": cols if cols else "All"
+        })
 
-                    if cols:
-                        duplicates = df[df.duplicated(subset=cols, keep=False)]
-                    else:
-                        duplicates = df[df.duplicated(keep=False)]
+    # -------------------
+    # Missing Values
+    # -------------------
+    st.subheader("Handle Missing Values")
+    df = st.session_state["data"]
 
-                    st.session_state["duplicates_found"] = duplicates
+    # Show missing values
+    df_missing = df.loc[:, df.isnull().any()]
+    if st.checkbox("Show missing values", key="show_missing_checkbox"):
+        if df_missing.shape[1] > 0:
+            missing = pd.DataFrame({
+                "Column": df_missing.columns,
+                "Missing Count": df_missing.isnull().sum(),
+                "Missing Percentage (%)": (df_missing.isnull().sum() / len(df) * 100).round(2)
+            })
+            st.markdown("**Missing Values Overview:**")
+            st.dataframe(missing, use_container_width=True, hide_index=True)
+        else:
+            st.success("No missing values remaining!")
 
-                    st.info(f"{len(duplicates)} duplicate rows found")
-                    st.dataframe(duplicates.head())
+    # Drop missing rows (persisted)
+    if "missing_rows_dropped" not in st.session_state:
+        st.session_state["missing_rows_dropped"] = False
 
-            detect_duplicates_fragment()
+    if st.button("Drop rows with missing values") and not st.session_state["missing_rows_dropped"]:
+        rows_to_drop = df.isna().any(axis=1).sum()
+        df_cleaned = df.dropna().reset_index(drop=True)
+        st.session_state["data"] = df_cleaned
+        st.session_state["missing_rows_dropped"] = True
+        st.session_state["last_action"] = f"Dropped {rows_to_drop} rows"
+        st.success(f"Dropped {rows_to_drop} rows successfully!")
 
-            @st.fragment
-            def remove_duplicates_fragment():
+        st.session_state["transform_log"].append({
+            "operation": "Drop Missing Rows",
+            "parameters": f"Removed {rows_to_drop} rows",
+            "columns": "All"
+        })
 
-                if "duplicates_found" not in st.session_state:
-                    return
+    # Fill missing values
+    if st.session_state["data"].isnull().values.any():
+        fill_value = st.text_input("Fill missing values with:", value="0")
+        if st.button("Apply Fill") and not st.session_state.get("missing_filled", False):
+            try:
+                value = float(fill_value)
+            except:
+                value = fill_value
+            df_filled = st.session_state["data"].fillna(value)
+            st.session_state["data"] = df_filled
+            st.session_state["missing_filled"] = True
+            st.session_state["last_action"] = f"Filled missing values with {value}"
+            st.session_state["transform_log"].append({
+                "operation": "Fill Missing Values",
+                "parameters": {"value": value},
+                "columns": "All"
+            })
 
-                if st.button("Remove Selected Duplicates", key="remove_duplicates_btn"):
+    # -------------------
+    # Dataset preview
+    # -------------------
+    st.subheader("Current Dataset (Updated)")
+    view_option = st.radio(
+        "View Options",
+        ["First 5 Rows", "Last 5 Rows", "Full Dataset"],
+        key="dataset_view_option",
+        horizontal=True
+    )
 
-                    cols = st.session_state.get("duplicate_columns_selector", [])
-                    keep_option = st.session_state.get("keep_duplicate_option", "first")
-
-                    before = len(st.session_state["data"])
-
-                    if cols:
-                        st.session_state["data"].drop_duplicates(
-                            subset=cols,
-                            keep=keep_option,
-                            inplace=True
-                        )
-                    else:
-                        st.session_state["data"].drop_duplicates(
-                            keep=keep_option,
-                            inplace=True
-                        )
-
-                    after = len(st.session_state["data"])
-
-                    st.success(f"{before - after} duplicate rows removed")
-
-                    if "transform_log" not in st.session_state:
-                        st.session_state["transform_log"] = []
-
-                    st.session_state["transform_log"].append({
-                        "operation": "Remove Duplicates",
-                        "parameters": {"keep": keep_option},
-                        "columns": cols if cols else "All"
-                    })
-            remove_duplicates_fragment()
-
-        with st.container(border=True):
-            st.subheader("Handle Missing Values")
-
-            df = st.session_state["data"]
-
-            # Initialize states
-            if "confirm_dropna" not in st.session_state:
-                st.session_state.confirm_dropna = False
-
-            # Missing values overview
-            df_missing = df.loc[:, df.isnull().any()]
-
-            @st.fragment
-            def show_missing_values():
-                if st.checkbox("Show missing values", value=True):
-                    if df_missing.shape[1] > 0:
-                        missing = pd.DataFrame({
-                            "Column": df_missing.columns,
-                            "Missing Count": df_missing.isnull().sum(),
-                            "Missing Percentage (%)": (
-                                df_missing.isnull().sum() / len(df) * 100
-                            ).round(2)
-                        })
-
-                        st.markdown("**Missing Values Overview:**")
-                        st.dataframe(missing, use_container_width=True, hide_index=True)
-                    else:
-                        st.success("No missing values remaining!")
-            show_missing_values()
-
-            # DROP NA WITH CONFIRMATION
-            rows_to_drop = df.isna().any(axis=1).sum()
-
-            @st.fragment
-            def drod_missing_rows():
-                if rows_to_drop > 0:
-                    if st.button("Drop rows with missing values"):
-                        st.session_state.confirm_dropna = True
-
-                    if st.session_state.confirm_dropna:
-                        st.warning(f"This will remove {rows_to_drop} rows. Continue?")
-
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            if st.button("Yes, drop rows"):
-                                st.session_state["data"] = df.dropna()
-
-                                st.session_state["transform_log"].append({
-                                    "operation": "Drop Missing Rows",
-                                    "parameters": f"Removed {rows_to_drop} rows",
-                                    "columns": "All"
-                                })
-
-                                st.session_state.confirm_dropna = False
-                                st.rerun()
-
-                        with col2:
-                            if st.button("Cancel"):
-                                st.session_state.confirm_dropna = False
-            drod_missing_rows()
-
-            # Fill NA
-            if df.isnull().values.any():
-                fill_value = st.text_input("Fill missing values with:", value="0")
-
-                if st.button("Apply Fill"):
-                    try:
-                        value = float(fill_value)
-                    except:
-                        value = fill_value  # allow strings too
-
-                    st.session_state["data"] = df.fillna(value)
-
-                    st.session_state["transform_log"].append({
-                        "operation": "Fill Missing Values",
-                        "parameters": {"value": value},
-                        "columns": "All"
-                    })
-
-                    st.success(f"Missing values filled with {value}")
-                    st.rerun()
+    data_to_show = st.session_state["data"]
+    if view_option == "First 5 Rows":
+        st.dataframe(data_to_show.head())
+    elif view_option == "Last 5 Rows":
+        st.dataframe(data_to_show.tail())
+    else:
+        st.dataframe(data_to_show)
 
     #column selection
     st.subheader("Select Columns to Keep")

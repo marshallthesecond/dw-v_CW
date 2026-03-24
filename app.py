@@ -32,6 +32,8 @@ if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
 
     st.session_state["data"] = df
+    # OG dataset for reset
+    st.session_state["original_data"] = df.copy()
 
 #tabs 
 tab1, tab2, tab3, tab4 = st.tabs([
