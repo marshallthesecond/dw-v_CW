@@ -201,15 +201,9 @@ def clean_prep():
     st.space("medium")
 
 
-
-
-
-
-
-
     # ------------------- 4.2 DUPLICATE DETECTION -------------------
 
-    with st.container():
+    with st.container(border=True):
         st.subheader("4.2 Duplicate Detection")
 
         # Include - exclude toggle
@@ -290,75 +284,143 @@ def clean_prep():
         # ------------------- 4.7 COLUMN OPERATIONS -------------------
 
         with st.container(border=True):
-            st.subheader("4.7 Column Operations")
+            st.subheader("4.7 Column Operations", text_alignment="center")
+            
+            st.space("medium")
 
-            # Column selection
-            st.subheader("Select Columns to Keep")
+            with st.container(horizontal=True):
+                with st.container():
+                    # Drop columns
+                    st.write("**Drop Columns**")
+                    columns_to_drop = st.multiselect(
+                        "Select columns to drop",
+                        st.session_state["data"].columns,
+                        key="columns_to_drop"
+                    )
+                    if st.button("Drop Columns", key="drop_selected_columns", type="primary"):
+                        new_df = st.session_state["data"].drop(columns=columns_to_drop)
+                        st.session_state["data"] = new_df
+                        st.success("Selected columns dropped")
 
-            selected_columns = st.multiselect(
-                "Choose columns",
-                st.session_state["data"].columns,
-                key="column_selection"
-            )
-            if st.button("Apply Column Selection", key="apply_column_selection"):
-                if selected_columns:
-                    st.session_state["data"] = st.session_state["data"][selected_columns].copy()
-                    st.success("Columns updated")
+                with st.container():
+                    # Rename column
+                    st.write("**Rename Column**")
 
-            # Drop columns
-            st.subheader("Drop Columns")
-            columns_to_drop = st.multiselect(
-                "Select columns to drop",
-                st.session_state["data"].columns,
-                key="columns_to_drop"
-            )
-            if st.button("Drop Selected Columns", key="drop_selected_columns"):
-                new_df = st.session_state["data"].drop(columns=columns_to_drop)
-                st.session_state["data"] = new_df
-                st.success("Selected columns dropped")
+                    old_name = st.selectbox(
+                        "Select column to rename",
+                        st.session_state["data"].columns,
+                        key="rename_column"
+                    )
+                    new_name = st.text_input(
+                        "Enter new column name",
+                        key="new_column_name"
+                    )
+                    if st.button("Rename Column", key="rename_column_btn") and new_name:
+                        new_df = st.session_state["data"].rename(columns={old_name: new_name})
+                        st.session_state["data"] = new_df
+                        st.success("Column renamed successfully")
+            
+            st.divider()
 
-            # Rename column
-            st.subheader("Rename Column")
+            # Create new columns
+            st.write("**Create New Columns**")
 
-            old_name = st.selectbox(
-                "Select column to rename",
-                st.session_state["data"].columns,
-                key="rename_column"
-            )
-            new_name = st.text_input(
-                "Enter new column name",
-                key="new_column_name"
-            )
-            if st.button("Rename Column", key="rename_column_btn") and new_name:
-                new_df = st.session_state["data"].rename(columns={old_name: new_name})
-                st.session_state["data"] = new_df
-                st.success("Column renamed successfully")
+            st.write("Write formulas using your exact column names. \n\n"
+                        "*Examples:* `Price / Quantity`, `Age * 1.2`, `Salary - Salary.mean()`")
+                
+            with st.container():
+                new_formula_col = st.text_input("New Column Name", key="new_formula_col")
+            with st.container():
+                formula_input = st.text_input("Formula", key="formula_input")
 
+            if st.button("Apply Formula", key="btn_apply_formula"):
+                if new_formula_col and formula_input:
+                    new_df = st.session_state["data"].copy()
+                    try:
+                        # pd.eval evaluates the string expression dynamically
+                        new_df[new_formula_col] = new_df.eval(formula_input)
+                        
+                        st.session_state["data"] = new_df
+                        st.session_state["transform_log"].append(f"Created column '{new_formula_col}' using formula: {formula_input}")
+                        st.success(f"Successfully created '{new_formula_col}'.")
+                        
+                    except Exception as e:
+                        st.error(f"Error evaluating formula. Check your column names and syntax. Details: {e}")
+                else:
+                    st.warning("Please provide both a new column name and a formula.")
+            
+            st.divider()
 
-        st.space("medium")
+            # Binning Numeric Columns
+            st.write("**Binning Numeric Columns**")
+
+            numeric_columns = st.session_state["data"].select_dtypes(include=["number"]).columns.tolist()
+                
+            if numeric_columns:
+                bin_target_col = st.selectbox("Select column to bin", numeric_columns, key="bin_target_col")
+                new_binned_col = st.text_input("New Binned Column Name", key="new_binned_col")
+                
+                bin_col1, bin_col2 = st.columns(2)
+                with bin_col1:
+                    bin_method = st.radio(
+                        "Binning Method", 
+                        ["Equal-width (Standard)", "Quantile (Equal-sized groups)"], 
+                        key="bin_method"
+                    )
+                with bin_col2:
+                    num_bins = st.number_input("Number of bins", min_value=2, max_value=50, value=4, key="num_bins")
+
+                if st.button("Apply Binning", key="btn_apply_binning"):
+                    if new_binned_col:
+                        new_df = st.session_state["data"].copy()
+                        try:
+                            if bin_method == "Equal-width (Standard)":
+                                # pd.cut divides the range into equal-width intervals
+                                new_df[new_binned_col] = pd.cut(new_df[bin_target_col], bins=num_bins)
+                            else:
+                                # pd.qcut divides the data so each bin has roughly the same number of records
+                                # duplicates="drop" prevents errors if many identical values fall on a bin edge
+                                new_df[new_binned_col] = pd.qcut(new_df[bin_target_col], q=num_bins, duplicates="drop")
+                            
+                            st.session_state["data"] = new_df
+                            st.session_state["transform_log"].append(f"Binned '{bin_target_col}' into {num_bins} {bin_method} bins as '{new_binned_col}'")
+                            st.success(f"Successfully created binned column '{new_binned_col}'.")
+                            
+                        except Exception as e:
+                            st.error(f"Error during binning: {e}")
+                    else:
+                        st.warning("Please provide a name for the new binned column.")
+            else:
+                st.info("No numeric columns found in the dataset to bin.")
+
 
 
         # -------------------- 4.3 and 4.4 DATA TYPES, CATEGORICAL TOOLS --------------------
 
-        with st.container():
+        # with st.container():
 
             # ------------------------ 4.3 DATA TYPES AND PARSING ------------------------
 
-            with st.container(border=True):
-                st.subheader("4.3 Data Types and Parsing")
-                st.subheader("Data Type Conversion")
+        with st.container(border=True):
+            st.subheader("4.3 Data Types and Parsing")
+            st.space("medium")
 
-                column_to_convert = st.selectbox(
-                    "Select column to convert",
-                    st.session_state["data"].columns,
-                    key="column_to_convert"
-                )
-                new_type = st.selectbox(
-                    "Convert to",
-                    ["Numeric", "Categorical", "Datetime"],
-                    key="new_type"
-                )
-
+            # Datatype conversion
+            st.write("**Data Type Conversion**")
+            with st.container(horizontal=True):
+                with st.container():
+                    column_to_convert = st.selectbox(
+                        "Select column to convert",
+                        st.session_state["data"].columns,
+                        key="column_to_convert"
+                    )
+                with st.container():
+                    new_type = st.selectbox(
+                        "Convert to",
+                        ["Numeric", "Categorical", "Datetime"],
+                        key="new_type"
+                    )
+            with st.container(horizontal_alignment="right"):
                 if st.button("Convert Column Type", key="convert_column_type"):
 
                     new_df = st.session_state["data"].copy()
@@ -397,72 +459,141 @@ def clean_prep():
                     
                     st.session_state["data"] = new_df
 
+            st.divider()
+            
+            # Datetime parsing
+            st.markdown("**Datetime Parsing**")
+
+            with st.container(horizontal=True):
+                with st.container():
+                    # Separate column selector for datetime
+                    datetime_column = st.selectbox(
+                        "Select column to parse as Datetime",
+                        st.session_state["data"].columns,
+                        key="datetime_column"
+                    )
+                with st.container():
+                    # Format selection
+                    date_format_choice = st.radio(
+                        "Select parsing method",
+                        ["Auto-detect", "Manual Format"],
+                        key="date_format_choice"
+                    )
+
+            manual_format = None
+            if date_format_choice == "Manual Format":
+                manual_format = st.selectbox(
+                    "Select or type format (e.g., %d/%m/%Y)",
+                    ["%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d", "%d-%b-%Y"],
+                    key="manual_format_input"
+                )
+                st.caption("Hint: %d=Day, %m=Month, %Y=Year (4-digit)")
+
+            with st.container(horizontal_alignment="right"):
+                if st.button("Parse to Datetime", key="parse_datetime_btn"):
+                    new_df = st.session_state["data"].copy()
+                    
+                    try:
+                        if date_format_choice == "Auto-detect":
+                            new_df[datetime_column] = pd.to_datetime(
+                                new_df[datetime_column], 
+                                errors="coerce"
+                            )
+                        else:
+                            new_df[datetime_column] = pd.to_datetime(
+                                new_df[datetime_column], 
+                                format=manual_format, 
+                                errors="coerce"
+                            )
+                        
+                        # Check if parsing failed completely
+                        if new_df[datetime_column].isna().all():
+                            st.warning("All values became NaT (Not a Time). Check if your chosen format matches the data.")
+                        else:
+                            st.session_state["data"] = new_df
+                            st.success(f"Successfully parsed '{datetime_column}' as Datetime.")
+                            
+                    except Exception as e:
+                        st.error(f"Error during parsing: {e}")
+
+            
+            # Show datatypes
+            datatypes = pd.DataFrame({
+                "Column": st.session_state["data"].columns,
+                "Data type": st.session_state["data"].dtypes[st.session_state["data"].columns].astype(str)
+            })
+            st.subheader("Data types:")
+            st.dataframe(datatypes, use_container_width=True, hide_index=True, width="content")
+
+
+
+        # st.space("medium")
+
+
+        # ---------------------------- 4.4 CATEGORICAL DATA TOOLS ----------------------------
+
+        with st.container(border=True):
+            st.subheader("4.4 Categorical Data Tools")
             st.space("medium")
 
+            cat_cols = st.session_state["data"].select_dtypes(include=["object", "category"]).columns
 
-            # ---------------------------- 4.4 CATEGORICAL DATA TOOLS ----------------------------
+            if len(cat_cols) > 0:
 
-            with st.container(border=True):
-                st.subheader("4.4 Categorical Data Tools")
+                cat_col = st.selectbox(
+                    "Select categorical column",
+                    cat_cols,
+                    key="categorical_column"
+                )
 
-                cat_cols = st.session_state["data"].select_dtypes(include=["object", "category"]).columns
+                clean_option = st.selectbox(
+                    "Standardization option",
+                    ["Trim whitespace", "Lowercase", "Title Case"],
+                    key="categorical_clean_option"
+                )
 
-                if len(cat_cols) > 0:
+                if st.button("Apply Standardization", key="apply_standardization"):
+                    new_df = st.session_state["data"].copy()
 
-                    cat_col = st.selectbox(
-                        "Select categorical column",
-                        cat_cols,
-                        key="categorical_column"
-                    )
-
-                    clean_option = st.selectbox(
-                        "Standardization option",
-                        ["Trim whitespace", "Lowercase", "Title Case"],
-                        key="categorical_clean_option"
-                    )
-
-                    if st.button("Apply Standardization", key="apply_standardization"):
-                        new_df = st.session_state["data"].copy()
-
-                        if clean_option == "Trim whitespace":
-                            new_df[cat_col] = (
-                                new_df[cat_col].astype(str).str.strip()
-                            )
-                        elif clean_option == "Lowercase":
-                            new_df[cat_col] = (
-                                new_df[cat_col].astype(str).str.lower()
-                            )
-                        elif clean_option == "Title Case":
-                            new_df[cat_col] = (
-                                new_df[cat_col].astype(str).str.title()
-                            )
-
-                        st.session_state["data"] = new_df
-                        st.success("Categorical values standardized")
-
-
-                    st.markdown("Rare Category Grouping")
-
-                    threshold = st.slider(
-                        "Minimum frequency (%)",
-                        0,
-                        20,
-                        5
-                    )
-
-                    if st.button("Group Rare Categories", key="group_rare_btn"):
-
-                        new_df = st.session_state["data"].copy()
-
-                        freq = new_df[cat_col].value_counts(normalize=True)
-                        rare = freq[freq < threshold / 100].index
-
+                    if clean_option == "Trim whitespace":
                         new_df[cat_col] = (
-                            new_df[cat_col].replace(rare, "Other")
+                            new_df[cat_col].astype(str).str.strip()
                         )
-                        
-                        st.session_state["data"] = new_df
-                        st.success("Rare categories grouped into 'Other'")
+                    elif clean_option == "Lowercase":
+                        new_df[cat_col] = (
+                            new_df[cat_col].astype(str).str.lower()
+                        )
+                    elif clean_option == "Title Case":
+                        new_df[cat_col] = (
+                            new_df[cat_col].astype(str).str.title()
+                        )
+
+                    st.session_state["data"] = new_df
+                    st.success("Categorical values standardized")
+
+
+                st.markdown("Rare Category Grouping")
+
+                threshold = st.slider(
+                    "Minimum frequency (%)",
+                    0,
+                    20,
+                    5
+                )
+
+                if st.button("Group Rare Categories", key="group_rare_btn"):
+
+                    new_df = st.session_state["data"].copy()
+
+                    freq = new_df[cat_col].value_counts(normalize=True)
+                    rare = freq[freq < threshold / 100].index
+
+                    new_df[cat_col] = (
+                        new_df[cat_col].replace(rare, "Other")
+                    )
+                    
+                    st.session_state["data"] = new_df
+                    st.success("Rare categories grouped into 'Other'")
 
 
     st.space("medium")
@@ -785,21 +916,21 @@ def clean_prep():
 
 
     #sidebar trnf.log
-    with st.sidebar:
-        st.markdown("## Transformation Log")
-        if st.session_state["transform_log"]:
-            for i, step in enumerate(st.session_state["transform_log"], 1):
-                with st.container(border=True):
-                    st.markdown(f"**Operation {i}: {step['operation']}**")
-                    st.markdown(f"Columns: {step['columns']}")
-                    st.markdown(f"Parameters: {step['parameters']}")
-        else:
-            st.info("No transformations applied yet.")
+    # with st.sidebar:
+    #     st.markdown("## Transformation Log")
+    #     if st.session_state["transform_log"]:
+    #         for i, step in enumerate(st.session_state["transform_log"], 1):
+    #             with st.container(border=True):
+    #                 st.markdown(f"**Operation {i}: {step['operation']}**")
+    #                 st.markdown(f"Columns: {step['columns']}")
+    #                 st.markdown(f"Parameters: {step['parameters']}")
+    #     else:
+    #         st.info("No transformations applied yet.")
 
-        #reset btn
-        if st.button("Reset All Transformations"):
-            st.session_state["data"] = st.session_state["original_data"].copy()
-            st.session_state["transform_log"] = []
-            st.success("Dataset reset to original")
+    #     #reset btn
+    #     if st.button("Reset All Transformations"):
+    #         st.session_state["data"] = st.session_state["original_data"].copy()
+    #         st.session_state["transform_log"] = []
+    #         st.success("Dataset reset to original")
 
     
