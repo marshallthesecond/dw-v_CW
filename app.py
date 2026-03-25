@@ -24,16 +24,20 @@ uploaded_file = st.sidebar.file_uploader(
 
 #load file
 if uploaded_file is not None:
-    if uploaded_file.name.endswith(".xlsx"):
-        df = pd.read_excel(uploaded_file)
-    elif uploaded_file.name.endswith(".json"):
-        df = pd.read_json(uploaded_file)
-    else:
-        df = pd.read_csv(uploaded_file)
+    # Check if this is a completely new upload
+    if "current_file" not in st.session_state or st.session_state["current_file"] != uploaded_file.name:
+        if uploaded_file.name.endswith(".xlsx"):
+            df = pd.read_excel(uploaded_file)
+        elif uploaded_file.name.endswith(".json"):
+            df = pd.read_json(uploaded_file)
+        else:
+            df = pd.read_csv(uploaded_file)
 
-    st.session_state["data"] = df
-    # OG dataset for reset
-    st.session_state["original_data"] = df.copy()
+        st.session_state["data"] = df
+        # OG dataset for reset
+        st.session_state["original_data"] = df.copy()
+        # Save the current file name so Streamlit knows not to reload it
+        st.session_state["current_file"] = uploaded_file.name
 
 #tabs 
 tab1, tab2, tab3, tab4 = st.tabs([

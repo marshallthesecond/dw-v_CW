@@ -94,38 +94,38 @@ def visualization():
         if chart_type == "Histogram":
             if not pd.api.types.is_numeric_dtype(df[x_col]):
                 st.error("Histogram requires numeric column")
-                return
-            ax.hist(df[x_col].dropna())
-            ax.set_title("Histogram")
+            else:
+                ax.hist(df[x_col].dropna())
+                ax.set_title("Histogram")
 
         #box plot
         elif chart_type == "Box Plot":
             if not pd.api.types.is_numeric_dtype(df[x_col]):
                 st.error("Box plot requires numeric column")
-                return
-            ax.boxplot(df[x_col].dropna())
-            ax.set_title("Box Plot")
+            else:
+                ax.boxplot(df[x_col].dropna())
+                ax.set_title("Box Plot")
 
         #scatter plot
         elif chart_type == "Scatter Plot":
             if y_col is None:
                 st.warning("Please select Y-axis")
-                return
-            ax.scatter(df[x_col], df[y_col])
-            ax.set_title("Scatter Plot")
+            else:
+                ax.scatter(df[x_col], df[y_col])
+                ax.set_title("Scatter Plot")
 
         #Line Chart
         elif chart_type == "Line Chart":
             if y_col is None:
                 st.warning("Please select Y-axis")
-                return
-            if aggregation:
-                grouped = df.groupby(x_col)[y_col].agg(aggregation)
-                ax.plot(grouped.index, grouped.values)
             else:
-                df_sorted = df.sort_values(by=x_col)
-                ax.plot(df_sorted[x_col], df_sorted[y_col])
-            ax.set_title("Line Chart")
+                if aggregation:
+                    grouped = df.groupby(x_col)[y_col].agg(aggregation)
+                    ax.plot(grouped.index, grouped.values)
+                else:
+                    df_sorted = df.sort_values(by=x_col)
+                    ax.plot(df_sorted[x_col], df_sorted[y_col])
+                ax.set_title("Line Chart")
 
         #Bar chart
         elif chart_type == "Bar Chart":
@@ -150,18 +150,21 @@ def visualization():
             ax.set_xticklabels(corr.columns, rotation=90)
             ax.set_yticklabels(corr.columns)
             ax.set_title("Correlation Matrix")
-
-        #Log Visualization 
-        st.session_state["viz_log"].append({
-            "chart_type": chart_type,
-            "x": x_col,
-            "y": y_col,
-            "group": group_col,
-            "aggregation": aggregation
-        })
-
+        
         st.pyplot(fig)
+        
+        #Log Visualization 
+        if st.button("Save chart to history"):
+            st.session_state["viz_log"].append({
+                "chart_type": chart_type,
+                "x": x_col,
+                "y": y_col,
+                "group": group_col,
+                "aggregation": aggregation
+            })
+            st.success("Chart saved to history")
 
+        
     except Exception as e:
         st.error("Error creating chart")
         st.write(e)
