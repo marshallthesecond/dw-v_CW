@@ -32,8 +32,10 @@ if uploaded_file is not None:
             df = pd.read_excel(uploaded_file)
         elif uploaded_file.name.endswith(".json"):
             df = pd.read_json(uploaded_file)
-        else:
+        elif uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
+        else:
+            st.error("Unsupported file format")
 
         st.session_state["data"] = df
         # OG dataset for reset
