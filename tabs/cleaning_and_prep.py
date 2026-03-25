@@ -23,130 +23,261 @@ def clean_prep():
 
 
 
-    # ------------------- 4.2 DUPLICATE DETECTION -------------------
+    #------------------- 4.1 MISSING VALUES (NULL HANDLING) -------------------   
 
-    with st.container(border=True, horizontal=True):
-        with st.container():
-            st.subheader("4.2 Duplicate Detection")
+    with st.container(border=True):
+        
+        st.subheader("4.1 Handle Missing Values")
 
-            # Include - exclude toggle
-            mode = st.radio(
-                "Column Selection Mode",
-                ["Including selected columns", "Excluding selected columns"],
-                key="column_mode",
-                horizontal=True
-            )
+        if "data" in st.session_state:
+            df_before = st.session_state["data"].copy()
 
-            # Column selector
-            cols = st.multiselect(
-                "Select columns to check duplicates (leave empty for full-row duplicates)",
-                st.session_state["data"].columns,
-                key="duplicate_columns"
-            )
+        # Show missing values
+        df_missing = st.session_state["data"].loc[:, st.session_state["data"].isnull().any()]
+        if st.checkbox("Show missing values", key="show_missing_checkbox"):
+            if df_missing.shape[1] > 0:
+                missing = pd.DataFrame({
+                    "Column": df_missing.columns,
+                    "Missing Count": df_missing.isnull().sum(),
+                    "Missing Percentage (%)": (df_missing.isnull().sum() / len(st.session_state["data"]) * 100).round(2),
+                    "Data type": st.session_state["data"].dtypes[df_missing.columns].astype(str)
+                })
+                st.markdown("**Missing Values Overview:**")
+                st.dataframe(missing, use_container_width=True, hide_index=True, width="content")
+            else:
+                st.success("No missing values remaining!")
 
-            # Detect duplicates
-            if st.button("Detect Duplicates", key="detect_duplicates_btn"):
-                
-                new_df = st.session_state["data"].copy()
-
-                if cols:
-                    if mode == "Including selected columns":
-                        subset_cols = cols
-                    else:
-                        subset_cols = [c for c in new_df.columns if c not in cols]
-                    if not subset_cols:
-                        st.warning("No columns selected for duplicate detection.")
-                        return
-                    duplicates = new_df[new_df.duplicated(subset=subset_cols, keep=False)]
-                else:
-                    duplicates = new_df[new_df.duplicated(keep=False)]
-                
-                st.dataframe(duplicates.head())
-                st.info(f"{len(duplicates)} duplicate rows found")
-                
-            st.divider()
-
-            left, right = st.columns([2, 1], vertical_alignment="bottom")
-
-            # Keep option
-            keep_option = left.radio(
-                "Keep which duplicate?",
-                ["first", "last"],
-                key="keep_option",
-                horizontal=True
-            )
-
-            st.space("stretch")
-
-            # Remove duplicates
-            if right.button("Remove Duplicates", key="remove_duplicates_btn", type="primary", width="stretch"):
-                
-                new_df = st.session_state["data"].copy()
-
-                if cols:
-                    if mode == "Including selected columns":
-                        subset_cols = cols
-                    else:
-                        subset_cols = [c for c in new_df.columns if c not in cols]
-
-                    new_df = new_df.drop_duplicates(subset=subset_cols, keep=keep_option).reset_index(drop=True)
-                else:
-                    new_df = new_df.drop_duplicates(keep=keep_option).reset_index(drop=True)
-                st.session_state["data"] = new_df.reset_index(drop=True)
-                st.success("Duplicates removed")
-
-
-
-        st.space("medium")
-
-
-
-        #------------------- 4.1 MISSING VALUES (NULL HANDLING) -------------------   
-
-        with st.container():
-           
-            st.subheader("4.1 Handle Missing Values")
-
-            # Show missing values
-            df_missing = st.session_state["data"].loc[:, st.session_state["data"].isnull().any()]
-            if st.checkbox("Show missing values", key="show_missing_checkbox"):
-                if df_missing.shape[1] > 0:
-                    missing = pd.DataFrame({
-                        "Column": df_missing.columns,
-                        "Missing Count": df_missing.isnull().sum(),
-                        "Missing Percentage (%)": (df_missing.isnull().sum() / len(st.session_state["data"]) * 100).round(2)
-                    })
-                    st.markdown("**Missing Values Overview:**")
-                    st.dataframe(missing, use_container_width=True, hide_index=True)
-                else:
-                    st.success("No missing values remaining!")
-
-            if st.button("Drop rows with missing values", key="drop_missing_btn"):
+        # Drop all rows with missing values
+        with st.container(horizontal_alignment="right"):
+            if st.button("Drop all rows with missing values", key="drop_missing_btn", type="primary"):
                 new_df = st.session_state["data"].copy()
                 rows_to_drop = new_df.isna().any(axis=1).sum()
                 new_df = new_df.dropna()
                 st.session_state["data"] = new_df.reset_index(drop=True)
                 st.success(f"Dropped {rows_to_drop} rows successfully!")
+                action_triggered = True
 
-            # Fill missing values
-            fill_value = st.text_input("Fill missing values with:", value="0", key="fill_value_input")
-            if st.button("Apply Fill", key="apply_fill_btn"):
-                new_df = st.session_state["data"].copy()
-                try:
-                    value = float(fill_value)
-                except:
-                    value = fill_value
-                new_df = new_df.fillna(value)
-                st.session_state["data"] = new_df
+        # Per-column missing value handling
+        # Column selector
+        col_select = st.selectbox(
+            "Select columns to handle missing values",
+            [None] + st.session_state["data"].columns.tolist(),
+            key="fill_column_select"
+        )
+        action_triggered = False
 
-            # Normalize missing values
-            if st.button("Normalize Missing Values"):
-                new_df = st.session_state["data"].replace(
-                    ["None", "none", "NULL", "null", "", " "],
-                    pd.NA
+        st.space("xsmall")
+
+        left, right = st.columns([1, 2])
+        # Drop rows in selected column
+        with left:
+            with st.container(horizontal=True, horizontal_alignment="right", gap=None):
+                with st.container():
+                    if st.button("Drop selected", key="drop_missing_col_btn", type="primary") and col_select:
+                        new_df = st.session_state["data"].copy()
+
+                        rows_to_drop = new_df[col_select].isna().sum()
+                        new_df = new_df.dropna(subset=[col_select])
+
+                        st.session_state["data"] = new_df.reset_index(drop=True)
+                        st.success(f"Dropped {rows_to_drop} rows with missing values in '{col_select}' successfully!")
+                        action_triggered = True
+                with st.container(width="content"):
+                    # Fill selected values with most frequent categorical value
+                    if st.button("Fill with Most Frequent Category", key="fill_frequent_cat_btn"):
+                        new_df = st.session_state["data"].copy()
+                        new_df[col_select] = new_df[col_select].fillna(new_df[col_select].mode().iloc[0])
+                        st.session_state["data"] = new_df
+                        st.success(f"Filled missing values in '{col_select}' with most frequent category")
+                        action_triggered = True
+
+        # Drop columns above a threshold
+        with right:
+            with st.container(horizontal=True, horizontal_alignment="right"):
+                with st.container(width="content"):
+                    with st.popover("Threshold"):
+                        threshold = st.slider(
+                            "Drop selected columns with more than % missing values",
+                            0, 100, 50,
+                            key="missing_threshold_slider"
+                        )
+                with st.container(width="content"):
+                    if st.button("Drop Columns Above Threshold", key="drop_missing_threshold_btn", type="primary"):
+                        new_df = st.session_state["data"].copy()
+
+                        missing_percent = new_df.isnull().mean() * 100
+                        cols_to_drop = missing_percent[missing_percent > threshold].index
+
+                        new_df = new_df.drop(columns=cols_to_drop)
+                        st.session_state["data"] = new_df.reset_index(drop=True)
+                        st.success(f"Dropped {len(cols_to_drop)} columns with more than {threshold}% missing values")
+                        action_triggered = True
+
+        st.space("xsmall")
+
+        # Mean, Median, Mode
+        st.write("Replace the selected numeric with:")
+        btn1, btn2, btn3 = st.columns(3)
+        if btn1.button("Mean", key="fill_mean_btn", width="stretch"):
+            new_df = st.session_state["data"].copy()
+            new_df[col_select] = new_df[col_select].fillna(new_df[col_select].mean())
+            st.session_state["data"] = new_df
+            st.success(f"Filled missing values in '{col_select}' with mean")
+            action_triggered = True
+        if btn2.button("Median", key="fill_median_btn", width="stretch"):
+            new_df = st.session_state["data"].copy()
+            new_df[col_select] = new_df[col_select].fillna(new_df[col_select].median())
+            st.session_state["data"] = new_df
+            st.success(f"Filled missing values in '{col_select}' with median")
+            action_triggered = True
+        if btn3.button("Mode", key="fill_mode_btn", width="stretch"):
+            new_df = st.session_state["data"].copy()
+            new_df[col_select] = new_df[col_select].fillna(new_df[col_select].mode().iloc[0])
+            st.session_state["data"] = new_df
+            st.success(f"Filled missing values in '{col_select}' with mode")
+            action_triggered = True
+
+        st.space("xsmall")
+
+        with st.container(horizontal=True):
+            # Fill selected values with custom value
+            with st.container():
+                constant = st.text_input("Fill selected missing values with:", value="0", key="fill_constant_input")
+                if st.button("Apply Custom Fill", key="apply_custom_fill_btn"):
+                    new_df = st.session_state["data"].copy()
+                    try:
+                        value = float(constant)
+                    except:
+                        value = constant
+                    new_df[col_select] = new_df[col_select].fillna(value)
+                    st.session_state["data"] = new_df
+                    st.success(f"Filled missing values in '{col_select}' with '{value}'")
+                    action_triggered = True
+
+            st.space("medium")
+
+            # Forward / backward fill
+            with st.container():
+                forward_backward = st.radio(
+                    "Select option",
+                    ["Forward fill", "Backward fill"],
+                    horizontal=True
                 )
-                st.session_state["data"] = new_df
-                st.session_state["last_action"] = "Normalized missing values"
+                if st.button("Apply Forward / Backward fill"):
+                    new_df = st.session_state["data"].copy()
+                    if forward_backward == "Forward fill":
+                        new_df[col_select] = new_df[col_select].ffill()
+                    elif forward_backward == "Backward fill":
+                        new_df[col_select] = new_df[col_select].bfill()
+                    st.session_state["data"] = new_df
+                    st.success("Forward/Backward setting applied")
+                    action_triggered = True
+
+        # ------ BEFORE/AFTER PREVIEW -----
+        if action_triggered:
+            st.divider()
+            st.subheader("Action Preview")
+            df_after = st.session_state["data"]
+            
+            m1, m2, m3 = st.columns(3)
+            
+            # Row Count Change
+            rows_b, rows_a = len(df_before), len(df_after)
+            m1.metric("Total Rows", rows_a, delta=rows_a - rows_b)
+            
+            # Null Count Change (Inverse color: negative delta = green)
+            nulls_b = df_before.isnull().sum().sum()
+            nulls_a = df_after.isnull().sum().sum()
+            m2.metric("Total Nulls", nulls_a, delta=nulls_a - nulls_b, delta_color="inverse")
+            
+            # Columns Remaining
+            cols_b, cols_a = len(df_before.columns), len(df_after.columns)
+            m3.metric("Columns", cols_a, delta=cols_a - cols_b)
+            
+            st.toast("Data updated!")
+
+
+
+    st.space("medium")
+
+
+
+
+
+
+
+
+    # ------------------- 4.2 DUPLICATE DETECTION -------------------
+
+    with st.container():
+        st.subheader("4.2 Duplicate Detection")
+
+        # Include - exclude toggle
+        mode = st.radio(
+            "Column Selection Mode",
+            ["Including selected columns", "Excluding selected columns"],
+            key="column_mode",
+            horizontal=True
+        )
+
+        # Column selector
+        cols = st.multiselect(
+            "Select columns to check duplicates (leave empty for full-row duplicates)",
+            st.session_state["data"].columns,
+            key="duplicate_columns"
+        )
+
+        # Detect duplicates
+        if st.button("Detect Duplicates", key="detect_duplicates_btn"):
+            
+            new_df = st.session_state["data"].copy()
+
+            if cols:
+                if mode == "Including selected columns":
+                    subset_cols = cols
+                else:
+                    subset_cols = [c for c in new_df.columns if c not in cols]
+                if not subset_cols:
+                    st.warning("No columns selected for duplicate detection.")
+                    return
+                duplicates = new_df[new_df.duplicated(subset=subset_cols, keep=False)]
+            else:
+                duplicates = new_df[new_df.duplicated(keep=False)]
+            
+            st.dataframe(duplicates.head())
+            st.info(f"{len(duplicates)} duplicate rows found")
+            
+        st.divider()
+
+        left, right = st.columns([2, 1], vertical_alignment="bottom")
+
+        # Keep option
+        keep_option = left.radio(
+            "Keep which duplicate?",
+            ["first", "last"],
+            key="keep_option",
+            horizontal=True
+        )
+
+        st.space("stretch")
+
+        # Remove duplicates
+        if right.button("Remove Duplicates", key="remove_duplicates_btn", type="primary", width="stretch"):
+            
+            new_df = st.session_state["data"].copy()
+
+            if cols:
+                if mode == "Including selected columns":
+                    subset_cols = cols
+                else:
+                    subset_cols = [c for c in new_df.columns if c not in cols]
+
+                new_df = new_df.drop_duplicates(subset=subset_cols, keep=keep_option).reset_index(drop=True)
+            else:
+                new_df = new_df.drop_duplicates(keep=keep_option).reset_index(drop=True)
+            st.session_state["data"] = new_df.reset_index(drop=True)
+            st.success("Duplicates removed")
+
 
 
     st.space("medium")

@@ -22,6 +22,8 @@ uploaded_file = st.sidebar.file_uploader(
     type=["csv", "xlsx", "json"]
 )
 
+st.sidebar.space("medium")
+
 #load file
 if uploaded_file is not None:
     # Check if this is a completely new upload
