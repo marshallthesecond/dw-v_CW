@@ -2,178 +2,240 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
 def visualization():
 
     st.title("Visualization Builder")
 
-    #initialize vizlg
-    if "viz_log" not in st.session_state:
-        st.session_state["viz_log"] = []
-
-    #get dataset
-    df = st.session_state.get("data")
-    if df is None:
-        st.warning("Please upload and clean data first.")
+    #Check dataset
+    if "data" not in st.session_state or st.session_state["data"] is None:
+        st.warning("Please upload a dataset first in the sidebar.")
         return
 
-    st.subheader("Current Dataset")
-    st.write(df.head())
+    df = st.session_state["data"].copy()
 
-    columns = df.columns.tolist()
+    st.space("medium")
 
-    #chart controls 
-    st.subheader("Build Your Chart")
+    #Filtering
 
     with st.container(border=True):
-
-        chart_type = st.selectbox(
-            "Select Chart Type",
-            ["Histogram", "Box Plot", "Scatter Plot", "Line Chart", "Bar Chart", "Correlation Heatmap"]
-        )
+        st.subheader("Filter Data")
 
         col1, col2 = st.columns(2)
 
+        #categorical filt.
         with col1:
-            x_col = st.selectbox("X-axis", columns)
+            cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
 
+            if cat_cols:
+                cat_col = st.selectbox("Select category column", [None] + cat_cols)
+
+                if cat_col:
+                    values = df[cat_col].dropna().unique()
+                    selected_vals = st.multiselect("Choose values", values)
+
+                    if selected_vals:
+                        df = df[df[cat_col].isin(selected_vals)]
+
+        #Numeric filter
         with col2:
-            y_col = st.selectbox("Y-axis (optional)", [None] + columns)
+            num_cols = df.select_dtypes(include=["number"]).columns.tolist()
 
-        group_col = st.selectbox("Group (optional)", [None] + columns)
+            if num_cols:
+                num_col = st.selectbox("Select numeric column", [None] + num_cols)
 
-        aggregation = st.selectbox(
-            "Aggregation (for bar/line)",
-            [None, "mean", "sum", "count", "median"]
-        )
+                if num_col:
+                    min_val = float(df[num_col].min())
+                    max_val = float(df[num_col].max())
 
-    #filtering 
-    st.subheader("Filter Data")
+                    if min_val == max_val:
+                        st.info(f"Column '{num_col}' has a single value: {min_val}. Filtering not needed.")
+                    else:
+                        selected_range = st.slider(
+                            "Select range",
+                            min_val,
+                            max_val,
+                            (min_val, max_val)
+                        )
+
+                        df = df[
+                            (df[num_col] >= selected_range[0]) &
+                            (df[num_col] <= selected_range[1])
+                        ]
+
+    st.space("medium")
+
+    #Chart Builder
 
     with st.container(border=True):
+        st.subheader("Create Visualization")
 
-        filter_col = st.selectbox("Filter column", [None] + columns)
+        c1, c2, c3 = st.columns(3)
 
-        if filter_col:
+        with c1:
+            plot_type = st.selectbox(
+                "Plot Type",
+                ["Histogram", "Box Plot", "Scatter Plot", "Line Chart", "Bar Chart", "Heatmap"]
+            )
 
-            if pd.api.types.is_numeric_dtype(df[filter_col]):
+        with c2:
+            x_col = st.selectbox("X Axis", df.columns)
 
-                min_val = float(df[filter_col].min())
-                max_val = float(df[filter_col].max())
+        with c3:
+            y_col = st.selectbox("Y Axis (if needed)", [None] + df.columns.tolist())
 
-                selected_range = st.slider(
-                    "Select range",
-                    min_val, max_val,
-                    (min_val, max_val)
-                )
+        agg = st.selectbox(
+            "Aggregation (optional)",
+            [None, "sum", "mean", "count", "median"]
+        )
 
-                df = df[
-                    (df[filter_col] >= selected_range[0]) &
-                    (df[filter_col] <= selected_range[1])
-                ]
+        top_n = st.number_input("Top N (for bar chart)", min_value=1, value=10)
 
+        st.space("small")
+
+        #Suggestions
+
+        if y_col:
+            if not pd.api.types.is_numeric_dtype(df[y_col]):
+                st.info("Selected Y column is categorical → Bar Chart may be more suitable")
+
+        if plot_type == "Heatmap":
+            num_cols = df.select_dtypes(include=["number"]).columns
+            if len(num_cols) < 2:
+                st.warning("Heatmap needs at least 2 numeric columns")
+
+        #Generate chart
+
+        if st.button("Generate Chart", type="primary"):
+
+            #Dynamic fg size
+            if plot_type == "Bar Chart":
+                fig, ax = plt.subplots(figsize=(7, 4))
+            elif plot_type == "Heatmap":
+                fig, ax = plt.subplots(figsize=(6, 5))
             else:
-                values = df[filter_col].dropna().unique()
-                selected_values = st.multiselect("Select values", values)
+                fig, ax = plt.subplots(figsize=(6, 4))
 
-                if selected_values:
-                    df = df[df[filter_col].isin(selected_values)]
+            try:
 
-    #top N for barchart
-    top_n = None
-    if chart_type == "Bar Chart":
-        top_n = st.slider("Top N categories", 1, 20, 10)
+                #Histogram
+                if plot_type == "Histogram":
+                    if not pd.api.types.is_numeric_dtype(df[x_col]):
+                        st.error("Histogram requires numeric column")
+                        return
 
-    #plotting
-    st.subheader("Visualization Output")
+                    ax.hist(df[x_col].dropna())
+                    ax.set_title(f"Histogram of {x_col}")
 
-    fig, ax = plt.subplots()
+                #BoxPlot
+                elif plot_type == "Box Plot":
+                    if not pd.api.types.is_numeric_dtype(df[x_col]):
+                        st.error("Box plot requires numeric column")
+                        return
 
-    try:
+                    ax.boxplot(df[x_col].dropna())
+                    ax.set_title(f"Box Plot of {x_col}")
 
-        #histogram
-        if chart_type == "Histogram":
-            if not pd.api.types.is_numeric_dtype(df[x_col]):
-                st.error("Histogram requires numeric column")
-            else:
-                ax.hist(df[x_col].dropna())
-                ax.set_title("Histogram")
+                #Scatter Plot
+                elif plot_type == "Scatter Plot":
+                    if not y_col:
+                        st.warning("Please select Y column")
+                        return
 
-        #box plot
-        elif chart_type == "Box Plot":
-            if not pd.api.types.is_numeric_dtype(df[x_col]):
-                st.error("Box plot requires numeric column")
-            else:
-                ax.boxplot(df[x_col].dropna())
-                ax.set_title("Box Plot")
+                    if not pd.api.types.is_numeric_dtype(df[x_col]) or not pd.api.types.is_numeric_dtype(df[y_col]):
+                        st.error("Scatter plot requires numeric X and Y")
+                        return
 
-        #scatter plot
-        elif chart_type == "Scatter Plot":
-            if y_col is None:
-                st.warning("Please select Y-axis")
-            else:
-                ax.scatter(df[x_col], df[y_col])
-                ax.set_title("Scatter Plot")
+                    ax.scatter(df[x_col], df[y_col], alpha=0.6)
+                    ax.set_title(f"{x_col} vs {y_col}")
 
-        #Line Chart
-        elif chart_type == "Line Chart":
-            if y_col is None:
-                st.warning("Please select Y-axis")
-            else:
-                if aggregation:
-                    grouped = df.groupby(x_col)[y_col].agg(aggregation)
-                    ax.plot(grouped.index, grouped.values)
-                else:
+                #LineChart
+                elif plot_type == "Line Chart":
+                    if not y_col:
+                        st.warning("Please select Y column")
+                        return
+
+                    if not pd.api.types.is_numeric_dtype(df[y_col]):
+                        st.error("Line chart requires numeric Y column")
+                        return
+
                     df_sorted = df.sort_values(by=x_col)
-                    ax.plot(df_sorted[x_col], df_sorted[y_col])
-                ax.set_title("Line Chart")
 
-        #Bar chart
-        elif chart_type == "Bar Chart":
-            if aggregation and y_col:
-                grouped = df.groupby(x_col)[y_col].agg(aggregation)
-                if top_n:
-                    grouped = grouped.sort_values(ascending=False).head(top_n)
-                ax.bar(grouped.index.astype(str), grouped.values)
-            else:
-                counts = df[x_col].value_counts().head(top_n)
-                ax.bar(counts.index.astype(str), counts.values)
-            plt.xticks(rotation=45)
-            ax.set_title("Bar Chart")
+                    if agg:
+                        grouped = df_sorted.groupby(x_col)[y_col].agg(agg).reset_index()
+                        ax.plot(grouped[x_col], grouped[y_col], linewidth=2)
 
-        #Correlation Heatmap
-        elif chart_type == "Correlation Heatmap":
-            corr = df.corr(numeric_only=True)
-            cax = ax.matshow(corr)
-            fig.colorbar(cax)
-            ax.set_xticks(range(len(corr.columns)))
-            ax.set_yticks(range(len(corr.columns)))
-            ax.set_xticklabels(corr.columns, rotation=90)
-            ax.set_yticklabels(corr.columns)
-            ax.set_title("Correlation Matrix")
+                    else:
+                        if len(df_sorted) > 300:
+                            st.info("Large dataset → using mean aggregation for clarity")
+                            grouped = df_sorted.groupby(x_col)[y_col].mean().reset_index()
+                            ax.plot(grouped[x_col], grouped[y_col], linewidth=2)
+                        else:
+                            ax.plot(df_sorted[x_col], df_sorted[y_col], linewidth=1, alpha=0.6)
+
+                    ax.set_title(f"{x_col} vs {y_col}")
+                    ax.grid(True, linestyle="--", alpha=0.5)
+
+                #Bar chart
+                elif plot_type == "Bar Chart":
+
+                    if agg and y_col:
+                        if not pd.api.types.is_numeric_dtype(df[y_col]):
+                            st.error("Aggregation requires numeric Y column")
+                            return
+
+                        grouped = df.groupby(x_col)[y_col].agg(agg).reset_index()
+                    else:
+                        grouped = df[x_col].value_counts().reset_index()
+                        grouped.columns = [x_col, "count"]
+                        y_col = "count"
+
+                    grouped = grouped.head(top_n)
+
+                    ax.bar(grouped[x_col], grouped[y_col])
+                    plt.xticks(rotation=45)
+                    ax.set_title("Bar Chart")
+
+                #heatmap
+                elif plot_type == "Heatmap":
+                    num_df = df.select_dtypes(include=["number"])
+
+                    if num_df.shape[1] < 2:
+                        st.error("Need at least 2 numeric columns for heatmap")
+                        return
+
+                    corr = num_df.corr()
+
+                    cax = ax.imshow(corr)
+                    ax.set_xticks(range(len(corr.columns)))
+                    ax.set_yticks(range(len(corr.columns)))
+                    ax.set_xticklabels(corr.columns, rotation=90)
+                    ax.set_yticklabels(corr.columns)
+
+                    fig.colorbar(cax)
+                    ax.set_title("Correlation Heatmap")
+
+                plt.tight_layout()
+                st.pyplot(fig)
+
+            except Exception as e:
+                st.error("Error generating chart")
+                st.write(e)
+
+    st.space("medium")
+
+
+    #Preview
+    with st.container(border=True):
+        st.subheader("Filtered Data Preview")
         
-        st.pyplot(fig)
+        #column filter for preview
+        all_cols = df.columns.tolist()
+        selected_columns = st.multiselect(
+            "Select columns to display",
+            all_cols,
+            default=all_cols  
+        )
         
-        #Log Visualization 
-        if st.button("Save chart to history"):
-            st.session_state["viz_log"].append({
-                "chart_type": chart_type,
-                "x": x_col,
-                "y": y_col,
-                "group": group_col,
-                "aggregation": aggregation
-            })
-            st.success("Chart saved to history")
-
-        
-    except Exception as e:
-        st.error("Error creating chart")
-        st.write(e)
-
-    #Visualization History 
-    st.subheader("Visualization History")
-
-    if "viz_log" in st.session_state and st.session_state["viz_log"]:
-        for i, step in enumerate(st.session_state["viz_log"], 1):
-            st.write(f"{i}. {step}")
-    else:
-        st.info("No visualizations created yet.")
+        #show filtered dataframe with only selected columns
+        st.dataframe(df[selected_columns])
