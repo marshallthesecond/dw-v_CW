@@ -43,6 +43,10 @@ if uploaded_file is not None:
         # Save the current file name so Streamlit knows not to reload it
         st.session_state["current_file"] = uploaded_file.name
 
+        # reset system
+        st.session_state["history"] = []
+        st.session_state["transform_log"] = []
+
 #tabs 
 tab1, tab2, tab3, tab4 = st.tabs([
     "Upload and Overview",
