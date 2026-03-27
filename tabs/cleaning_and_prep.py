@@ -1,6 +1,51 @@
 import streamlit as st
 import pandas as pd
 
+
+
+
+
+
+
+# ---------- TRANSFORMATION ENGINE ----------
+
+def init_transform_system():
+    if "transform_log" not in st.session_state:
+        st.session_state["transform_log"] = []
+
+    if "history" not in st.session_state:
+        st.session_state["history"] = []
+
+def log_step(operation, parameters, columns):
+    st.session_state["transform_log"].append({
+        "operation": operation,
+        "parameters": parameters,
+        "columns": columns
+    })
+
+def save_state():
+    # Save a copy BEFORE transformation
+    st.session_state["history"].append(
+        st.session_state["data"].copy()
+    )
+
+def undo_last():
+    if st.session_state["history"]:
+        st.session_state["data"] = st.session_state["history"].pop()
+        if st.session_state["transform_log"]:
+            st.session_state["transform_log"].pop()
+
+def reset_all():
+    st.session_state["data"] = st.session_state["original_data"].copy()
+    st.session_state["transform_log"] = []
+    st.session_state["history"] = []
+
+
+
+
+
+
+
 def clean_prep():
     st.title("Data Cleaning and Preparation") 
 
@@ -15,8 +60,7 @@ def clean_prep():
         return
 
     # Initialize transform log
-    if "transform_log" not in st.session_state:
-        st.session_state["transform_log"] = []
+    init_transform_system()
 
     st.space("medium")
 
@@ -50,10 +94,20 @@ def clean_prep():
         # Drop all rows with missing values
         with st.container(horizontal_alignment="right"):
             if st.button("Drop all rows with missing values", key="drop_missing_btn", type="primary"):
+                save_state()
+
                 new_df = st.session_state["data"].copy()
                 rows_to_drop = new_df.isna().any(axis=1).sum()
                 new_df = new_df.dropna()
+
                 st.session_state["data"] = new_df.reset_index(drop=True)
+
+                log_step(
+                    "Drop missing rows",
+                    {"rows_removed": int(rows_to_drop)},
+                    "ALL"
+                )
+
                 st.success(f"Dropped {rows_to_drop} rows successfully!")
                 action_triggered = True
 
@@ -119,9 +173,19 @@ def clean_prep():
         st.write("Replace the selected numeric with:")
         btn1, btn2, btn3 = st.columns(3)
         if btn1.button("Mean", key="fill_mean_btn", width="stretch"):
+            save_state()
+
             new_df = st.session_state["data"].copy()
             new_df[col_select] = new_df[col_select].fillna(new_df[col_select].mean())
+
             st.session_state["data"] = new_df
+
+            log_step(
+                "Fill Missing",
+                {"method": "mean"},
+                [col_select]
+            )
+
             st.success(f"Filled missing values in '{col_select}' with mean")
             action_triggered = True
         if btn2.button("Median", key="fill_median_btn", width="stretch"):
@@ -341,7 +405,7 @@ def clean_prep():
                         new_df[new_formula_col] = new_df.eval(formula_input)
                         
                         st.session_state["data"] = new_df
-                        st.session_state["transform_log"].append(f"Created column '{new_formula_col}' using formula: {formula_input}")
+                        # st.session_state["transform_log"].append(f"Created column '{new_formula_col}' using formula: {formula_input}")
                         st.success(f"Successfully created '{new_formula_col}'.")
                         
                     except Exception as e:
@@ -383,7 +447,7 @@ def clean_prep():
                                 new_df[new_binned_col] = pd.qcut(new_df[bin_target_col], q=num_bins, duplicates="drop")
                             
                             st.session_state["data"] = new_df
-                            st.session_state["transform_log"].append(f"Binned '{bin_target_col}' into {num_bins} {bin_method} bins as '{new_binned_col}'")
+                            # st.session_state["transform_log"].append(f"Binned '{bin_target_col}' into {num_bins} {bin_method} bins as '{new_binned_col}'")
                             st.success(f"Successfully created binned column '{new_binned_col}'.")
                             
                         except Exception as e:
@@ -915,22 +979,29 @@ def clean_prep():
 
 
 
-    #sidebar trnf.log
-    # with st.sidebar:
-    #     st.markdown("## Transformation Log")
-    #     if st.session_state["transform_log"]:
-    #         for i, step in enumerate(st.session_state["transform_log"], 1):
-    #             with st.container(border=True):
-    #                 st.markdown(f"**Operation {i}: {step['operation']}**")
-    #                 st.markdown(f"Columns: {step['columns']}")
-    #                 st.markdown(f"Parameters: {step['parameters']}")
-    #     else:
-    #         st.info("No transformations applied yet.")
+    # sidebar trnf.log
+    with st.sidebar:
+        st.markdown("## Transformation Log")
 
-    #     #reset btn
-    #     if st.button("Reset All Transformations"):
-    #         st.session_state["data"] = st.session_state["original_data"].copy()
-    #         st.session_state["transform_log"] = []
-    #         st.success("Dataset reset to original")
+        if st.session_state["transform_log"]:
+            for i, step in enumerate(st.session_state["transform_log"], 1):
+                with st.container(border=True):
+                    st.markdown(f"**{i}. {step['operation']}**")
+                    st.caption(f"Columns: {step['columns']}")
+                    st.caption(f"Parameters: {step['parameters']}")
+        else:
+            st.info("No transformations yet.")
 
-    
+        st.divider()
+
+        col1, col2 = st.columns(2)
+
+        if col1.button("↩️ Undo"):
+            undo_last()
+            st.rerun()
+
+        if col2.button("🔄 Reset"):
+            reset_all()
+            st.rerun()
+
+        
