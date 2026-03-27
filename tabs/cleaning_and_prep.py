@@ -1,4 +1,5 @@
 import streamlit as st
+import numpy as np
 import pandas as pd
 
 
@@ -394,10 +395,19 @@ def clean_prep():
 
             st.session_state["data"] = new_df.reset_index(drop=True)
 
+
+            # Logging
+            col_selected_or_not = cols
+            if not cols:
+                col_selected_or_not = "Full-row duplicates"
+            else:
+                col_selected_or_not = cols
+
             log_step(
                 "Remove selected duplicates",
-                {"keep:": keep_option},
-                [cols]
+                {"keep:": keep_option,
+                 "show_duplicates": mode},
+                [col_selected_or_not]
             )
 
             st.success("Duplicates removed")
@@ -428,15 +438,23 @@ def clean_prep():
                     key="columns_to_drop"
                 )
                 if st.button("Drop Columns", key="drop_selected_columns", type="primary"):
+                    save_state()
+
                     new_df = st.session_state["data"].drop(columns=columns_to_drop)
                     st.session_state["data"] = new_df
+
+                    log_step(
+                        "Drop columns",
+                        {"method": "st.drop()"},
+                        [columns_to_drop]
+                    )
                     st.success("Selected columns dropped")
 
             st.space("medium")
 
             with st.container():
-                # Rename column
-                st.write("**Rename Column**")
+                # Rename columns
+                st.write("**Rename Columns**")
 
                 old_name = st.selectbox(
                     "Select column to rename",
@@ -448,8 +466,18 @@ def clean_prep():
                     key="new_column_name"
                 )
                 if st.button("Rename Column", key="rename_column_btn", type="primary") and new_name:
+                    save_state()
+
                     new_df = st.session_state["data"].rename(columns={old_name: new_name})
                     st.session_state["data"] = new_df
+
+                    log_step(
+                        "Rename columns",
+                        {
+                            "New column name": new_name
+                        },
+                        [old_name]
+                    )
                     st.success("Column renamed successfully")
         
         st.divider()
@@ -460,8 +488,12 @@ def clean_prep():
                 # Create new columns
                 st.write("**Create New Columns**")
 
-                st.write("Write formulas using your exact column names. \n\n"
-                            "*Examples:* `Price / Quantity`, `Age * 1.2`, `Salary - Salary.mean()`")
+                with st.popover("Helper! / Rules", type="tertiary"):
+                    st.write("Write formulas using your exact column names. \n\n"
+                                "Before applying a new formula, convert the columns into *String* or *Intiger* \n\n"
+                                "*Examples:* `Price / Quantity`, `Age * 1.2`, `Salary - Salary.mean()` \n\n"
+                                "It supports standard arithmetic (+, -, *, /) and boolean operators (&, |, ~) \n\n"
+                                "Use `` ` `` backticks if column names have space")
                     
                 with st.container():
                     new_formula_col = st.text_input("New Column Name", key="new_formula_col")
@@ -469,21 +501,47 @@ def clean_prep():
                     formula_input = st.text_input("Formula", key="formula_input")
 
                 if st.button("Apply Formula", key="btn_apply_formula", type="primary"):
+                    save_state()
+
                     if new_formula_col and formula_input:
                         new_df = st.session_state["data"].copy()
+                        success = False
+
                         try:
                             # pd.eval evaluates the string expression dynamically
-                            new_df[new_formula_col] = new_df.eval(formula_input)
+                            new_df[new_formula_col] = new_df.eval(formula_input, engine="python")
                             
                             st.session_state["data"] = new_df
-                            # st.session_state["transform_log"].append(f"Created column '{new_formula_col}' using formula: {formula_input}")
                             st.success(f"Successfully created '{new_formula_col}'.")
+
+                            success = True
                             
                         except Exception as e:
-                            st.error(f"Error evaluating formula. Check your column names and syntax. Details: {e}")
+                            st.error(f"Error evaluating formula. Check your column names and syntax. \n\n"
+                                     "Check *Helper!/Rules* \n\n"
+                                     f"Details: {e}")
+                            success = False
+                        if success:
+                            log_step(
+                                "Custom formula",
+                                {
+                                    "New column": new_formula_col,
+                                    "Formula": formula_input
+                                },
+                                {"No original column was affected"}
+                            )
+                        else:
+                            log_step(
+                                "Error occured at Apply fomula",
+                                {
+                                    "New column": new_formula_col,
+                                    "Formula": formula_input
+                                },
+                                {"No original column was affected"}
+                            )
                     else:
                         st.warning("Please provide both a new column name and a formula.")
-            
+                    
             st.space("medium")
 
             with st.container():
@@ -491,6 +549,9 @@ def clean_prep():
                 st.write("**Binning Numeric Columns**")
 
                 numeric_columns = st.session_state["data"].select_dtypes(include=["number"]).columns.tolist()
+
+                # Function for previewing bins
+                # def preview_bins():
                     
                 if numeric_columns:
                     bin_target_col = st.selectbox("Select column to bin", numeric_columns, key="bin_target_col")
@@ -506,26 +567,103 @@ def clean_prep():
                     with bin_col2:
                         num_bins = st.number_input("Number of bins", min_value=2, max_value=50, value=4, key="num_bins")
 
-                    if st.button("Apply Binning", key="btn_apply_binning", type="primary"):
-                        if new_binned_col:
+                    with st.container(horizontal=True, horizontal_alignment="right"):
+                        with st.container():
+                            use_labels = st.checkbox("Use custom labels")
+                        with st.container():
+                            suggested_bins = int(np.ceil(np.log2(len(st.session_state["data"])) + 1))
+                            st.caption(f"Suggested bins: {suggested_bins}", help="Suggestion used by Sturges' rule - a simple, " \
+                            "commonly used statistical formula to determine the optimal number of bins for a histogram, " \
+                            "based on the number of observations. It works best for relatively small, normal datasets")
+                        
+                    labels = None
+                    if use_labels:
+                        labels_input = st.text_input("Enter labels (comma-separated)", placeholder="Low, Medium, High, Very High")
+                        if labels_input:
+                            labels = [l.strip() for l in labels_input.split(",")]
+
+                    if labels and len(labels) != num_bins:
+                        st.error("Number of labels must match number of bins.")
+                        # st.stop()
+
+                    btn1, btn2 = st.columns([1, 3])
+                    # with st.container(horizontal=True):
+
+                    with btn1:
+                        if st.button("Apply Binning", key="btn_apply_binning", type="primary"):
+                            save_state()
+
+                            if new_binned_col:
+                                new_df = st.session_state["data"].copy()
+                                try:
+                                    if bin_method == "Equal-width (Standard)":
+                                        # pd.cut divides the range into equal-width intervals
+                                        new_df[new_binned_col] = pd.cut(
+                                            new_df[bin_target_col], 
+                                            bins=num_bins, 
+                                            labels=labels if labels else None
+                                        )
+                                    else:
+                                        # pd.qcut divides the data so each bin has roughly the same number of records
+                                        # duplicates="drop" prevents errors if many identical values fall on a bin edge
+                                        new_df[new_binned_col] = pd.qcut(
+                                            new_df[bin_target_col], 
+                                            q=num_bins,
+                                            labels=labels if labels else None,
+                                            duplicates="drop"
+                                        )
+                                    
+                                    if labels and len(labels) != num_bins:
+                                        st.error("Number of labels must match number of bins.")
+                                        st.stop()
+                                    
+                                    st.session_state["data"] = new_df
+
+                                    log_step(
+                                        "Bining numeric columns",
+                                        {
+                                            "New column name": new_binned_col,
+                                            "Binning method": bin_method,
+                                            "No. of bins": num_bins
+                                        },
+                                        [bin_target_col]
+                                    )
+                                    st.success(f"Successfully created binned column '{new_binned_col}'.")
+                                except Exception as e:
+                                    st.error(f"Error during binning: {e}")
+                            else:
+                                st.warning("Please provide a name for the new binned column.")
+                            
+                    with btn2:
+                        with st.popover("Preview bins before applying", width="stretch"):
                             new_df = st.session_state["data"].copy()
                             try:
-                                if bin_method == "Equal-width (Standard)":
-                                    # pd.cut divides the range into equal-width intervals
-                                    new_df[new_binned_col] = pd.cut(new_df[bin_target_col], bins=num_bins)
+                                preview_series = (
+                                    pd.cut(st.session_state["data"][bin_target_col], bins=num_bins, labels=labels if labels else None)
+                                    if bin_method == "Equal-width (Standard)"
+                                    else pd.qcut(st.session_state["data"][bin_target_col], q=num_bins, duplicates="drop", labels=labels if labels else None)
+                                )
+
+                                if not new_binned_col:
+                                    temp_col_name = "Preview_Bin" 
                                 else:
-                                    # pd.qcut divides the data so each bin has roughly the same number of records
-                                    # duplicates="drop" prevents errors if many identical values fall on a bin edge
-                                    new_df[new_binned_col] = pd.qcut(new_df[bin_target_col], q=num_bins, duplicates="drop")
+                                    temp_col_name = new_binned_col
                                 
-                                st.session_state["data"] = new_df
-                                # st.session_state["transform_log"].append(f"Binned '{bin_target_col}' into {num_bins} {bin_method} bins as '{new_binned_col}'")
-                                st.success(f"Successfully created binned column '{new_binned_col}'.")
+                                st.write("### Bin Preview")
                                 
+                                new_df[temp_col_name] = preview_series
+
+                                preview_df = pd.DataFrame({
+                                    bin_target_col: st.session_state["data"][bin_target_col],
+                                    "Bin": preview_series
+                                })
+                                st.dataframe(preview_df.head(10))
+                                st.write("### Bin Distribution")
+                                st.bar_chart(new_df[new_binned_col].value_counts().sort_index())
+                            
                             except Exception as e:
-                                st.error(f"Error during binning: {e}")
-                        else:
-                            st.warning("Please provide a name for the new binned column.")
+                                st.error(f"Preview error: {e}")
+                            
                 else:
                     st.info("No numeric columns found in the dataset to bin.")
 
@@ -557,7 +695,7 @@ def clean_prep():
                     with st.container():
                         new_type = st.selectbox(
                             "Convert to",
-                            ["Numeric", "Categorical", "Datetime"],
+                            ["Numeric", "Categorical", "Datetime", "String", "Boolean"],
                             key="new_type"
                         )
                 with st.container(horizontal_alignment="right"):
@@ -569,28 +707,55 @@ def clean_prep():
                         try:
                             #convert to numeric
                             if new_type == "Numeric":
-                                #remove common dirty charact. like commas or $
-                                new_df[column_to_convert] = (
-                                    new_df[column_to_convert]
-                                    .astype(str)
-                                    .str.replace(",", "")
-                                    .str.replace("$", "")
-                                )
-                                new_df[column_to_convert] = pd.to_numeric(
-                                    new_df[column_to_convert],
-                                    errors="coerce"
-                                )
+                                # convert to string
+                                series = new_df[column_to_convert].astype(str)
+
+                                # handle negative numbers in parentheses: "(123)" -> "-123"
+                                series = series.str.replace(r'^\((.*)\)$', r'-\1', regex=True)
+
+                                # remove everything except digits, decimal point, minus sign
+                                series = series.str.replace(r'[^0-9\.-]', '', regex=True)
+
+                                # remove multiple dots or trailing dots
+                                series = series.str.replace(r'\.(?=.*\.)', '', regex=True)
+                                series = series.str.rstrip('.')
+
+                                # convert to numeric, invalid parsing becomes NaN
+                                new_df[column_to_convert] = pd.to_numeric(series, errors='coerce')
+
                             #convert to categorical
                             elif new_type == "Categorical":
                                 new_df[column_to_convert] = (
                                     new_df[column_to_convert].astype("category")
                                 )
+
                             #convert to datetime
                             elif new_type == "Datetime":
                                 new_df[column_to_convert] = pd.to_datetime(
                                     new_df[column_to_convert],
                                     errors="coerce"
                                 )
+
+                            #convert to string
+                            elif new_type == "String":
+                                new_df[column_to_convert] = (
+                                    new_df[column_to_convert].astype("string")
+                                )
+                            # convert to boolean
+                            elif new_type == "Boolean":
+                                series = new_df[column_to_convert].astype(str).str.lower().str.strip()
+
+                                mapping = {
+                                    'true': True, '1': True, 'yes': True, 'y': True,
+                                    'false': False, '0': False, 'no': False, 'n': False
+                                }
+                                bool_series = series.map(mapping)
+
+                                unmapped_count = bool_series.isna().sum()
+                                if unmapped_count > 0:
+                                    st.warning(f"{unmapped_count} values could not be converted and are set as NaN")
+
+                                new_df[column_to_convert] = bool_series
 
                             st.success(f"Column converted to {new_type} successfully")
 
@@ -745,6 +910,53 @@ def clean_prep():
                         [cat_col]
                     )
                     st.success("Categorical values standardized")
+
+                st.divider()
+
+                # ---------------- Mapping / Replacement ----------------
+                st.markdown("**Mapping / Replacement**")
+
+                fill_other_option = st.checkbox("Set unmatched values to 'Other'", value=False, key="set_unmatched_other")
+
+                if 'mapping_data' not in st.session_state:
+                    # initialize mapping table
+                    st.session_state['mapping_data'] = pd.DataFrame({"Original Value": [], "Mapped Value": []})
+
+                mapping_df = st.data_editor(
+                    st.session_state['mapping_data'],
+                    num_rows="dynamic",
+                    key="mapping_editor"
+                )
+
+                if st.button("Apply Mapping", key="apply_mapping_btn", type="primary"):
+                    save_state()
+                    new_df = st.session_state["data"].copy()
+
+                    mapping_dict = mapping_df.dropna(subset=["Original Value"]).set_index("Original Value")["Mapped Value"].to_dict()
+
+                    # Apply mapping
+                    series = new_df[cat_col].astype(str)
+                    mapped_series = series.map(mapping_dict)
+
+                    if fill_other_option:
+                        mapped_series = mapped_series.fillna("Other")
+                    else:
+                        mapped_series = mapped_series.fillna(series)
+
+                    changed_count = (series != mapped_series).sum()
+                    st.info(f"{changed_count} values were changed by the mapping.")
+
+                    new_df[cat_col] = mapped_series
+                    st.session_state["data"] = new_df
+
+                    st.session_state['mapping_data'] = mapping_df
+
+                    log_step(
+                        "Mapping / Replacement",
+                        {"Set unmatched to 'Other'": fill_other_option},
+                        [cat_col]
+                    )
+                    st.success("Mapping applied successfully")
 
                 # st.space("xsmall")
                 st.divider()
@@ -1132,27 +1344,29 @@ def clean_prep():
 
     # sidebar trnf.log
     with st.sidebar:
-        st.markdown("## Transformation Log")
+        st.header("Transformation Log")
+        with st.container(border=True, height=300):
+            
+            if st.session_state["transform_log"]:
+                for i, step in enumerate(st.session_state["transform_log"], 1):
+                    with st.container(border=True):
+                        st.markdown(f"**{i}. {step['operation']}**")
+                        st.caption(f"Columns: {step['columns']}")
+                        st.caption(f"Parameters: {step['parameters']}")
+            else:
+                st.info("No transformations yet.")
 
-        if st.session_state["transform_log"]:
-            for i, step in enumerate(st.session_state["transform_log"], 1):
-                with st.container(border=True):
-                    st.markdown(f"**{i}. {step['operation']}**")
-                    st.caption(f"Columns: {step['columns']}")
-                    st.caption(f"Parameters: {step['parameters']}")
-        else:
-            st.info("No transformations yet.")
+            # st.divider()
+        with st.container():
+            col1, col2 = st.columns(2)
 
-        st.divider()
+            if col1.button("↩️ Undo", width="stretch"):
+                undo_last()
+                st.rerun()
 
-        col1, col2 = st.columns(2)
-
-        if col1.button("↩️ Undo"):
-            undo_last()
-            st.rerun()
-
-        if col2.button("🔄 Reset"):
-            reset_all()
-            st.rerun()
+            if col2.button("🔄 Reset", width="stretch"):
+                reset_all()
+                st.rerun()
 
         
+    # in-page navigation

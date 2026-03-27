@@ -19,10 +19,11 @@ st.sidebar.header("Upload Dataset")
 #file uploader 
 uploaded_file = st.sidebar.file_uploader(
     "Upload your file",
-    type=["csv", "xlsx", "json"]
+    type=["csv", "xlsx", "json"],
+    label_visibility="collapsed"
 )
 
-st.sidebar.space("medium")
+# st.sidebar.space("xxsmall")
 
 #load file
 if uploaded_file is not None:
