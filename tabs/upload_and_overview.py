@@ -3,14 +3,7 @@ import pandas as pd
 
 # @st.cache_data
 def upload_overview():
-
-    # Set page configuration
-    st.set_page_config(
-        page_title="Data Upload & Overview",
-        page_icon="📈",
-        layout="wide",
-        )
-
+    
     # Title and welcome message
     st.title("Your Data Wrangler and Visualizer")
     st.write("Welcome to your Data Wrangler and Visualizer! Upload your data and explore them with ease!")
@@ -33,7 +26,7 @@ def upload_overview():
     # Data shape
     with st.container(border=True):
         st.markdown("**Data Shape:**")
-        col1, col2 = st.columns(2, border=True)
+        col1, col2 = st.columns(2)
         col1.metric("Rows", df.shape[0])
         col2.metric("Columns", df.shape[1])
 
