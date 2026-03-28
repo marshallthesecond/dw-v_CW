@@ -19,13 +19,13 @@ def upload_overview():
 
     @st.fragment
     def show_full_dataset():
-        if st.checkbox("Show full dataset"):
-            st.write(df)
-    show_full_dataset()
+        return st.write(df)
+    with st.expander("Show full dataset"):
+        show_full_dataset()
 
     # Data shape
     with st.container(border=True):
-        st.markdown("**Data Shape:**")
+        st.markdown("**Your dataset has:**")
         col1, col2 = st.columns(2)
         col1.metric("Rows", df.shape[0])
         col2.metric("Columns", df.shape[1])

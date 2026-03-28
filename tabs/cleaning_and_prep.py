@@ -20,7 +20,6 @@ def log_step(operation, parameters, columns):
     })
 
 def save_state():
-    # Save a copy BEFORE transformation
     st.session_state["history"].append(
         st.session_state["data"].copy()
     )
@@ -37,11 +36,80 @@ def reset_all():
     st.session_state["history"] = []
 
 
+@st.cache_data
+def compute_missing(df):
+    df_missing = df.loc[:, df.isnull().any()]
+    if df_missing.shape[1] == 0:
+        return None
+    
+    return pd.DataFrame({
+        "Column": df_missing.columns,
+        "Missing Count": df_missing.isnull().sum(),
+        "Missing Percentage (%)": (df_missing.isnull().sum() / len(st.session_state["data"]) * 100).round(2),
+        "Data type": st.session_state["data"].dtypes[df_missing.columns].astype(str)
+    })
 
-# ---------- MAIN LOGIC - CLEANING AND PREP ----------
+@st.cache_data
+def compute_missin_percent(df):
+    return df.isnull().mean() * 100
+
+@st.cache_data
+def compute_duplicates(df, cols, mode):
+    if cols:
+        if mode == "Including selected columns":
+            subset_cols = cols
+        else:
+            subset_cols = [c for c in df.columns if c not in cols]
+
+        if not subset_cols:
+            return pd.DataFrame()
+
+        return df[df.duplicated(subset=subset_cols, keep=False)]
+    else:
+        return df[df.duplicated(keep=False)]
+
+@st.cache_data
+def compute_binning_preview(df, col, method, num_bins, labels):
+    if method == "Equal-width (Standard)":
+        preview_series = pd.cut(
+            df[col],
+            bins=num_bins,
+            labels=labels if labels else None
+        )
+    else:
+        preview_series = pd.qcut(
+            df[col],
+            q=num_bins,
+            labels=labels if labels else None,
+            duplicates="drop"
+        )
+
+    preview_series_str = preview_series.astype(str)
+
+    distribution = preview_series_str.value_counts().sort_index()
+
+    return preview_series, distribution, preview_series_str
+
+
+
+# ------------------------------------------------------------ MAIN LOGIC - CLEANING AND PREP --------------------------------------------------
 
 def clean_prep():
     st.title("Data Cleaning and Preparation") 
+
+    st.subheader("Page overview")
+    st.write("Here you can clean up your data.Do not reload your page, othervise you'll loose your progress. ")
+    st.write("Page goues in the following order: \n\n")
+    st.code("1. Handle Missing Values \n\n"
+            "2. Duplicate Detection \n\n"
+            "3. Column Operations (drop, rename, create new, binning) \n\n"
+            "4. Data Type Conversion and Parsing \n\n"
+            "5. Categorical Data Tools \n\n"
+            "6. Numeric Cleaning \n\n"
+            "7. Normalization and Scaling \n\n"
+            "8. Data Validation Rules \n\n")
+    st.write("**Dataset Preview** is displayed at the end of the page. All your changes will be reflecte there")
+    
 
     # Show last action if exists
     if "last_action" in st.session_state:
@@ -53,35 +121,37 @@ def clean_prep():
         st.warning("Please upload a dataset first in the sidebar.")
         return
 
-    # Initialize transform log
     init_transform_system()
 
     st.space("medium")
 
 
-    #------------------- 4.1 MISSING VALUES (NULL HANDLING) -------------------   
+
+    #----------------------------- 4.1 MISSING VALUES (NULL HANDLING) -------------------   
 
     with st.container(border=True):
         
-        st.subheader("4.1 Handle Missing Values", text_alignment="center")
+        st.subheader("1 Handle Missing Values", text_alignment="center")
 
         if "data" in st.session_state:
             df_before = st.session_state["data"].copy()
 
         # Show missing values
-        df_missing = st.session_state["data"].loc[:, st.session_state["data"].isnull().any()]
-        if st.checkbox("Show missing values", key="show_missing_checkbox"):
-            if df_missing.shape[1] > 0:
-                missing = pd.DataFrame({
-                    "Column": df_missing.columns,
-                    "Missing Count": df_missing.isnull().sum(),
-                    "Missing Percentage (%)": (df_missing.isnull().sum() / len(st.session_state["data"]) * 100).round(2),
-                    "Data type": st.session_state["data"].dtypes[df_missing.columns].astype(str)
-                })
-                st.markdown("**Missing Values Overview:**")
-                st.dataframe(missing, use_container_width=True, hide_index=True, width="content")
-            else:
-                st.success("No missing values remaining!")
+        # df_missing = st.session_state["data"].loc[:, st.session_state["data"].isnull().any()]
+        missing = compute_missing(st.session_state["data"])
+        @st.fragment
+        def show_missing_values():
+            if st.checkbox("Show missing values", key="show_missing_checkbox", value=True):
+                if missing is not None:
+                    with st.container(horizontal=True, vertical_alignment="center"):
+                        st.markdown("**Missing Values Overview:**")
+                        if st.button("Refresh", type="tertiary", icon=":material/refresh:"):
+                            st.rerun()
+                    st.dataframe(missing, use_container_width=True, hide_index=True, width="content")
+                else:
+                    st.success("No missing values remaining!")
+                
+        show_missing_values()
 
         # Drop all rows with missing values
         with st.container(horizontal_alignment="right"):
@@ -169,7 +239,9 @@ def clean_prep():
                         save_state()
 
                         new_df = st.session_state["data"].copy()
-                        missing_percent = new_df.isnull().mean() * 100
+
+                        missing_percent = compute_missin_percent(new_df)
+
                         cols_to_drop = missing_percent[missing_percent > threshold].index
 
                         new_df = new_df.drop(columns=cols_to_drop)
@@ -323,10 +395,11 @@ def clean_prep():
     st.space("xlarge")
 
 
+
     # ------------------- 4.2 DUPLICATE DETECTION -------------------
 
     with st.container(border=True):
-        st.subheader("4.2 Duplicate Detection", text_alignment="center")
+        st.subheader("2 Duplicate Detection", text_alignment="center")
 
         # Include - exclude toggle
         mode = st.radio(
@@ -346,22 +419,15 @@ def clean_prep():
         # Detect duplicates
         if st.button("Detect Duplicates", key="detect_duplicates_btn"):
             
-            new_df = st.session_state["data"].copy()
+            new_df = st.session_state["data"]
 
-            if cols:
-                if mode == "Including selected columns":
-                    subset_cols = cols
-                else:
-                    subset_cols = [c for c in new_df.columns if c not in cols]
-                if not subset_cols:
-                    st.warning("No columns selected for duplicate detection.")
-                    return
-                duplicates = new_df[new_df.duplicated(subset=subset_cols, keep=False)]
+            duplicates = compute_duplicates(new_df, cols, mode)
+
+            if duplicates.empty():
+                st.warning("No columns selected for duplicate detection.")
             else:
-                duplicates = new_df[new_df.duplicated(keep=False)]
-            
-            st.dataframe(duplicates.head())
-            st.info(f"{len(duplicates)} duplicate rows found")
+                st.dataframe(duplicates.head())
+                st.info(f"{len(duplicates)} duplicate rows found")
             
         st.divider()
 
@@ -417,14 +483,11 @@ def clean_prep():
     st.space("xlarge")
 
 
-    # --------- 4.7, 4.3 and 4.4 - Column Operations + Data Type Conversion + Categorical Tools ---------
-
-    # with st.container(horizontal=True):
 
     # ------------------- 4.7 COLUMN OPERATIONS -------------------
 
     with st.container(border=True):
-        st.subheader("4.7 Column Operations", text_alignment="center")
+        st.subheader("3 Column Operations", text_alignment="center")
         
         st.space("medium")
 
@@ -638,10 +701,12 @@ def clean_prep():
                         with st.popover("Preview bins before applying", width="stretch"):
                             new_df = st.session_state["data"].copy()
                             try:
-                                preview_series = (
-                                    pd.cut(st.session_state["data"][bin_target_col], bins=num_bins, labels=labels if labels else None)
-                                    if bin_method == "Equal-width (Standard)"
-                                    else pd.qcut(st.session_state["data"][bin_target_col], q=num_bins, duplicates="drop", labels=labels if labels else None)
+                                preview_series, preview_series_str, distribution = compute_binning_preview(
+                                    st.session_state["data"],
+                                    bin_target_col,
+                                    bin_method,
+                                    num_bins,
+                                    labels
                                 )
 
                                 if not new_binned_col:
@@ -659,7 +724,7 @@ def clean_prep():
                                 })
                                 st.dataframe(preview_df.head(10))
                                 st.write("### Bin Distribution")
-                                st.bar_chart(new_df[new_binned_col].value_counts().sort_index())
+                                st.bar_chart(preview_series_str)
                             
                             except Exception as e:
                                 st.error(f"Preview error: {e}")
@@ -668,17 +733,14 @@ def clean_prep():
                     st.info("No numeric columns found in the dataset to bin.")
 
 
+
     st.space("xlarge")
 
-
-    # -------------------- 4.3 and 4.4 DATA TYPES, CATEGORICAL TOOLS --------------------
-
-    # with st.container(horizontal=True):
 
     # ------------------------ 4.3 DATA TYPES AND PARSING ------------------------
 
     with st.container(border=True):
-        st.subheader("4.3 Data Types and Parsing", text_alignment="center")
+        st.subheader("4 Data Types and Parsing", text_alignment="center")
         st.space("small")
 
         with st.container(horizontal=True):
@@ -848,23 +910,15 @@ def clean_prep():
         st.dataframe(datatypes, use_container_width=True, hide_index=True, width="content")
 
 
-
-    # st.space("medium")
-
-
-
     st.space("medium")
 
 
-    # --------------------- 4.5 and 4.6 NUMERIC CLEANING AND SCALING ---------------------
-
     with st.container(horizontal=True):
 
-        
-    # ---------------------------- 4.4 CATEGORICAL DATA TOOLS ----------------------------
+    # -------------------------------------- 4.4 CATEGORICAL DATA TOOLS ----------------------------
 
         with st.container(border=True):
-            st.subheader("4.4 Categorical Data Tools")
+            st.subheader("5 Categorical Data Tools")
             st.space("medium")
 
             cat_cols = st.session_state["data"].select_dtypes(include=["object", "category"]).columns
@@ -998,10 +1052,10 @@ def clean_prep():
 
 
 
-        # ----------------------------- 4.5 NUMERIC CLEANING ------------------------------
+        # --------------------------------------- 4.5 NUMERIC CLEANING ------------------------------
 
         with st.container(border=True):
-            st.subheader("4.5 Numeric Cleaning")
+            st.subheader("6 Numeric Cleaning")
 
             st.space("medium")
 
@@ -1146,10 +1200,10 @@ def clean_prep():
 
 
 
-        # -------------------- 4.6 NORMALIZATION AND SCALING --------------------
+        # ------------------------------ 4.6 NORMALIZATION AND SCALING --------------------
 
         with st.container(border=True):
-            st.subheader("4.6 Normalization / Scaling")
+            st.subheader("7 Normalization / Scaling")
 
             st.space("medium")
 
@@ -1232,11 +1286,11 @@ def clean_prep():
     st.space("medium")
 
 
-    # ------------------------- 4.8 Data Validation Rules --------------------------
+    # ----------------------------------- 4.8 Data Validation Rules --------------------------
 
     with st.container(border=True):
 
-        st.subheader("4.8 Data Validation Rules", text_alignment="center")
+        st.subheader("8 Data Validation Rules", text_alignment="center")
 
         st.space("medium")
 
@@ -1323,7 +1377,8 @@ def clean_prep():
     st.space("xxlarge")
 
 
-    # ------------------- Dataset preview -------------------
+
+    # --------------------------------------- Dataset preview -------------------
 
     st.subheader("Current Dataset (Updated)")
 
@@ -1342,9 +1397,9 @@ def clean_prep():
 
 
 
-    # sidebar trnf.log
+    # ------------------------------ Sidebar Tranformation log ----------
     with st.sidebar:
-        st.header("Transformation Log")
+        st.header("Transformation Log", help="Your activities will be reflected here")
         with st.container(border=True, height=300):
             
             if st.session_state["transform_log"]:
@@ -1360,13 +1415,10 @@ def clean_prep():
         with st.container():
             col1, col2 = st.columns(2)
 
-            if col1.button("↩️ Undo", width="stretch"):
+            if col1.button("↩️ Undo", width="stretch", help="Undo your last action"):
                 undo_last()
                 st.rerun()
 
             if col2.button("🔄 Reset", width="stretch"):
                 reset_all()
                 st.rerun()
-
-        
-    # in-page navigation

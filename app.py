@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 #sidebar title
-st.sidebar.header("Upload Dataset")
+st.sidebar.header("Upload Dataset", help="Upload any dataset of type CSV, JSON or EXCEL")
 
 @st.cache_data
 def load_file(uploaded_file):
