@@ -1,0 +1,89 @@
+{
+    "steps": [
+        {
+            "operation": "Drop missing rows",
+            "parameters": {
+                "rows_removed": 24
+            },
+            "columns": "ALL"
+        },
+        {
+            "operation": "Remove selected duplicates",
+            "parameters": {
+                "keep:": "first",
+                "show_duplicates": "Including selected columns"
+            },
+            "columns": [
+                "Full-row duplicates"
+            ]
+        },
+        {
+            "operation": "Drop columns",
+            "parameters": {
+                "method": "st.drop()"
+            },
+            "columns": [
+                [
+                    "Year"
+                ]
+            ]
+        },
+        {
+            "operation": "Rename columns",
+            "parameters": {
+                "New column name": "GameID"
+            },
+            "columns": [
+                "GameId"
+            ]
+        },
+        {
+            "operation": "Bining numeric columns",
+            "parameters": {
+                "New column name": "Maximum Temp",
+                "Binning method": "Equal-width (Standard)",
+                "No. of bins": 4
+            },
+            "columns": [
+                "MaxTemp"
+            ]
+        },
+        {
+            "operation": "Convert column type",
+            "parameters": {
+                "Convert to: ": "Numeric"
+            },
+            "columns": [
+                "GameID"
+            ]
+        },
+        {
+            "operation": "Standartization",
+            "parameters": {
+                "Option": "Trim whitespace"
+            },
+            "columns": [
+                "Round"
+            ]
+        },
+        {
+            "operation": "Detect Outliers",
+            "parameters": {
+                "method": "IQR",
+                "count": 143
+            },
+            "columns": [
+                "GameID"
+            ]
+        },
+        {
+            "operation": "NUmeric cleaning",
+            "parameters": {
+                "Action": "Show Outliers"
+            },
+            "columns": [
+                "GameID"
+            ]
+        }
+    ]
+}

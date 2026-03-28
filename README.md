@@ -40,6 +40,9 @@ https://data-wrangling-coursework.streamlit.app/
 │   ├── cleaning_and_prep.py
 │   ├── visualization.py
 │   └── export_and_report.py
+|
+|   ├── transformation report/   *(consists of report files from the recorded and uloaded session run)*
+|   ├── datasets/                *(include several sample datasets - games.csv was used in the uploaded video)*
 
 
 # General idea / workflow
