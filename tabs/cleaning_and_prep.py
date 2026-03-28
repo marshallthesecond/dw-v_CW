@@ -99,7 +99,7 @@ def clean_prep():
 
     st.subheader("Page overview")
     st.write("Here you can clean up your data.Do not reload your page, othervise you'll loose your progress. ")
-    st.write("Page goues in the following order: \n\n")
+    st.write("Page goes in the following order: \n\n")
     st.code("1. Handle Missing Values \n\n"
             "2. Duplicate Detection \n\n"
             "3. Column Operations (drop, rename, create new, binning) \n\n"
