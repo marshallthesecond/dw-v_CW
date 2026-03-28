@@ -423,8 +423,8 @@ def clean_prep():
 
             duplicates = compute_duplicates(new_df, cols, mode)
 
-            if duplicates.empty():
-                st.warning("No columns selected for duplicate detection.")
+            if duplicates.empty:
+                st.warning("No columns selected for duplicate detection. Or no duplicates found")
             else:
                 st.dataframe(duplicates.head())
                 st.info(f"{len(duplicates)} duplicate rows found")
